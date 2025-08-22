@@ -1,0 +1,12 @@
+﻿# Lazy.nvim / packer kompiliertes
+plugin/packer_compiled.lua
+
+# Falls du Swap/Backup/Undo im Repo-Ordner speicherst (eher unüblich):
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# Session-Dateien, Logs etc.
+session.*
+*.log
