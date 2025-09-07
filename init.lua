@@ -80,3 +80,24 @@ vim.o.shiftround = true       -- Round indentation to multiple of shiftwidth
 
 vim.keymap.set("n", "<Esc>", ":nohlsearch<CR>", { noremap = true, silent = true })    -- Esc to quickly remove highlights after searching
 vim.api.nvim_set_keymap('n', '<C-Z>', 'u', { noremap = true, silent = true })         -- Remaps Ctrl Z to undo
+
+-- send deletes to register d
+vim.keymap.set({"n","v"}, "d", '"dd', { noremap = true })
+vim.keymap.set("n", "D", '"dD', { noremap = true })
+
+-- send changes to register c
+vim.keymap.set({"n","v"}, "c", '"cc', { noremap = true })
+vim.keymap.set("n", "C", '"cC', { noremap = true })
+
+-- single-char delete → black hole
+vim.keymap.set("n", "x", '"_x', { noremap = true })
+vim.keymap.set("n", "X", '"_X', { noremap = true })
+
+-- send puts to register p
+vim.keymap.set("v", "p", [["pyP]], { noremap = true })
+vim.keymap.set("v", "P", [["pyP]], { noremap = true })
+
+-- send substitutes to register s
+vim.keymap.set({"n","v"}, "s", '"ss', { noremap = true })
+vim.keymap.set({"n","v"}, "S", '"sS', { noremap = true })
+
