@@ -94,10 +94,9 @@ vim.keymap.set("n", "x", '"_x', { noremap = true })
 vim.keymap.set("n", "X", '"_X', { noremap = true })
 
 -- send puts to register p
-vim.keymap.set("v", "p", [["pyP]], { noremap = true })
-vim.keymap.set("v", "P", [["pyP]], { noremap = true })
+vim.keymap.set("v", "p", '"pdp', { noremap = true, silent = true })
+vim.keymap.set("v", "P", '"pdP', { noremap = true, silent = true })
 
 -- send substitutes to register s
 vim.keymap.set({"n","v"}, "s", '"ss', { noremap = true })
 vim.keymap.set({"n","v"}, "S", '"sS', { noremap = true })
-
