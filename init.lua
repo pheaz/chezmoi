@@ -79,7 +79,7 @@ vim.o.shiftround = true       -- Round indentation to multiple of shiftwidth
 -- Keymaps
 
 vim.keymap.set("n", "<Esc>", ":nohlsearch<CR>", { noremap = true, silent = true })    -- Esc to quickly remove highlights after searching
-vim.api.nvim_set_keymap('n', '<C-Z>', 'u', { noremap = true, silent = true })         -- Remaps Ctrl Z to undo
+vim.api.nvim_set_keymap('n', '<C-Z>', 'u', { noremap = true })         -- Remaps Ctrl Z to undo
 
 -- send deletes to register d
 vim.keymap.set({"n","v"}, "d", '"dd', { noremap = true })
@@ -94,9 +94,12 @@ vim.keymap.set("n", "x", '"_x', { noremap = true })
 vim.keymap.set("n", "X", '"_X', { noremap = true })
 
 -- send puts to register p
-vim.keymap.set("v", "p", '"pdp', { noremap = true, silent = true })
-vim.keymap.set("v", "P", '"pdP', { noremap = true, silent = true })
+vim.keymap.set("v", "p", '"pdp', { noremap = true })
+vim.keymap.set("v", "P", '"pdP', { noremap = true })
 
 -- send substitutes to register s
 vim.keymap.set({"n","v"}, "s", '"ss', { noremap = true })
 vim.keymap.set({"n","v"}, "S", '"sS', { noremap = true })
+
+-- Copy to system clipboard in Visual mode
+vim.keymap.set("v", "<C-c>", '"+y', { noremap = true })
