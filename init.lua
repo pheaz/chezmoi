@@ -1,3 +1,7 @@
+-- Lazy.nvim Package Manager
+
+require("config.lazy")
+
 -- User Interface (UX / UI) Improvements
 
 vim.o.number = true           -- Enable line numbers
@@ -34,7 +38,7 @@ vim.opt.hlsearch = true       -- Keep search matches highlighted after searching
 -- Quality-of-Life Settings
 
 vim.opt.clipboard = "unnamedplus" -- System clipboard integration
--- vim.o.selection = "inclusive" -- Include last character always
+vim.o.selection = "inclusive" -- Include last character always
 vim.o.undofile = true         -- Persistent undo history
 vim.o.confirm = true          -- Safe quit prompts
 vim.o.swapfile = false        -- Disable swapfile creation
@@ -103,3 +107,6 @@ vim.keymap.set({"n","v"}, "S", '"sS', { noremap = true })
 
 -- Copy to system clipboard in Visual mode
 vim.keymap.set("v", "<C-c>", '"+y', { noremap = true })
+
+-- replay last used macro with Q
+vim.api.nvim_set_keymap('n', 'Q', '@@', { noremap = true, silent = true })
