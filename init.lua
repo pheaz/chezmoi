@@ -18,7 +18,7 @@ vim.o.wildmode = "longest:full,full"  -- Improved command-line completion
 -- Performance Tweaks
 
 vim.o.lazyredraw = true       -- Lazy redraw
-vim.o.updatetime = 300        -- Faster refresh interval
+vim.o.updatetime = 1000       -- Faster refresh interval
 vim.o.timeoutlen = 300        -- Shorter mapping timeout
 vim.o.ttimeoutlen = 50        -- Reduce timeout for escape sequences
 
