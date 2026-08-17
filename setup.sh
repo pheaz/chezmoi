@@ -8,11 +8,9 @@ usage() {
 Usage:
   $0 nvim [status]
   $0 nvim install
-  $0 nvim materialize
 
-status       Compare the live config with the repo without changing anything.
-install      Copy the repo config into its natural location only if it is absent.
-materialize  Replace an old symlink to the repo with a real directory copy.
+status   Compare the live config with the repo without changing anything.
+install  Copy the repo config into its natural location only if it is absent.
 EOF
   exit 2
 }
@@ -53,8 +51,7 @@ status_tree() {
   target=$3
 
   if [ -L "$target" ]; then
-    printf '! %s is a symlink, not an independent config copy\n' "$target"
-    printf '  Run: %s %s materialize\n' "$0" "$component"
+    printf '! %s is a symlink; symlink setups are unsupported\n' "$target"
     return 1
   fi
 
@@ -225,33 +222,6 @@ install_tree() {
   printf 'Installed %s -> %s\n' "$source" "$target"
 }
 
-materialize_tree() {
-  component=$1
-  source=$2
-  target=$3
-
-  if [ ! -L "$target" ]; then
-    printf 'Refusing: %s is not a symlink. Nothing was changed.\n' "$target" >&2
-    exit 1
-  fi
-
-  source_real=$(CDPATH= cd -- "$source" && pwd -P)
-  target_real=$(CDPATH= cd -- "$target" 2>/dev/null && pwd -P || true)
-
-  if [ "$source_real" != "$target_real" ]; then
-    printf 'Refusing: %s does not point to this repo config. Nothing was changed.\n' "$target" >&2
-    exit 1
-  fi
-
-  tmp="${target}.dotfiles-materialize.$$"
-  rm -rf "$tmp"
-  cp -R "$source" "$tmp"
-  rm "$target"
-  mv "$tmp" "$target"
-  printf 'Materialized %s as an independent directory copy.\n' "$target"
-  printf 'Run "%s %s status" to compare it with the repo.\n' "$0" "$component"
-}
-
 require_git_repo
 
 component=${1:-}
@@ -268,6 +238,5 @@ esac
 case "$action" in
   status) status_tree "$component" "$source" "$target" ;;
   install) install_tree "$component" "$source" "$target" ;;
-  materialize) materialize_tree "$component" "$source" "$target" ;;
   *) usage ;;
 esac
