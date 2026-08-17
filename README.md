@@ -51,18 +51,4 @@ or on Windows:
 
 `install` refuses to replace an existing config directory.
 
-### Convert an old symlink setup
-
-If `~/.config/nvim` (or `%LOCALAPPDATA%\nvim` on Windows) is still a symlink pointing into this repo, convert it to an independent real directory with:
-
-```sh
-./setup.sh nvim materialize
-```
-
-or:
-
-```powershell
-.\setup.ps1 nvim materialize
-```
-
-This only operates when the symlink resolves to this repository's `nvim/` directory.
+Symlink-based config setups are not supported.
