@@ -4,7 +4,7 @@ param(
     [string]$Component,
 
     [Parameter(Position = 1)]
-    [ValidateSet('status', 'install', 'materialize')]
+    [ValidateSet('status', 'install')]
     [string]$Action = 'status'
 )
 
@@ -35,8 +35,7 @@ function Show-Match([string]$Commit) {
 function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Target) {
     $item = Get-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
     if ($item -and $item.LinkType) {
-        Write-Host "! $Target is a symlink, not an independent config copy"
-        Write-Host "  Run: .\setup.ps1 $ComponentName materialize"
+        Write-Host "! $Target is a symlink; symlink setups are unsupported"
         return
     }
 
@@ -180,26 +179,6 @@ function Install-ConfigTree([string]$Source, [string]$Target) {
     Write-Host "Installed $Source -> $Target"
 }
 
-function Materialize-ConfigTree([string]$ComponentName, [string]$Source, [string]$Target) {
-    $item = Get-Item -LiteralPath $Target -Force -ErrorAction Stop
-    if (-not $item.LinkType) {
-        throw "$Target is not a symlink. Nothing was changed."
-    }
-
-    $sourceReal = (Resolve-Path -LiteralPath $Source).Path
-    $targetReal = (Resolve-Path -LiteralPath $Target).Path
-    if ($sourceReal -ne $targetReal) {
-        throw "$Target does not point to this repo config. Nothing was changed."
-    }
-
-    $tmp = "$Target.dotfiles-materialize.$PID"
-    Copy-Item -LiteralPath $Source -Destination $tmp -Recurse
-    Remove-Item -LiteralPath $Target
-    Move-Item -LiteralPath $tmp -Destination $Target
-    Write-Host "Materialized $Target as an independent directory copy."
-    Write-Host "Run: .\setup.ps1 $ComponentName status"
-}
-
 & git -C $RepoDir rev-parse --is-inside-work-tree *> $null
 if ($LASTEXITCODE -ne 0) { throw "Not a Git worktree: $RepoDir" }
 
@@ -211,7 +190,6 @@ switch ($Component) {
 }
 
 switch ($Action) {
-    'status'      { Test-ConfigTree $Component $source $target }
-    'install'     { Install-ConfigTree $source $target }
-    'materialize' { Materialize-ConfigTree $Component $source $target }
+    'status'  { Test-ConfigTree $Component $source $target }
+    'install' { Install-ConfigTree $source $target }
 }
