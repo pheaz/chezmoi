@@ -5,16 +5,46 @@ Personal configuration files shared across machines.
 ## Layout
 
 - `nvim/` — repository copy of the Neovim configuration
-- `setup.sh` — compare/install helpers for macOS/Linux
-- `setup.ps1` — compare/install helpers for Windows
+- `dotfiles.code-workspace.template` — portable VS Code workspace template
+- `setup.sh` — compare/install/workspace helpers for macOS/Linux
+- `setup.ps1` — compare/install/workspace helpers for Windows
 
 Configs remain in their applications' natural locations. The repository keeps a separate tracked copy and the setup scripts compare the two without overwriting existing files.
+
+## VS Code workspace
+
+The tracked workspace template contains the dotfiles repository root and a placeholder for the machine's live Neovim config directory. Generate the machine-local workspace after cloning or pulling the repo.
+
+macOS/Linux:
+
+```sh
+./setup.sh workspace
+```
+
+Windows PowerShell:
+
+```powershell
+.\setup.ps1 workspace
+```
+
+This creates `dotfiles.code-workspace` in the repository root. The generated file is ignored by Git because it contains machine-specific absolute paths.
+
+Resolved Neovim paths:
+
+- macOS/Linux: `${XDG_CONFIG_HOME:-$HOME/.config}/nvim`
+- Windows: `%LOCALAPPDATA%\nvim`
+
+Open the generated workspace with VS Code:
+
+```sh
+code dotfiles.code-workspace
+```
 
 ## Neovim
 
 Natural config locations:
 
-- macOS/Linux: `~/.config/nvim`
+- macOS/Linux: `~/.config/nvim` by default, or `$XDG_CONFIG_HOME/nvim` when `XDG_CONFIG_HOME` is set
 - Windows: `%LOCALAPPDATA%\nvim`
 
 ### Compare
