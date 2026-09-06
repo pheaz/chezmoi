@@ -6,7 +6,7 @@
     },
     {
       "name": "nvim config",
-      "path": "/Users/e4zyphil/.config/nvim"
+      "path": "~/.config/nvim"
     }
   ],
   "settings": {}
