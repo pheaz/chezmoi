@@ -81,7 +81,7 @@ Run setup with no component to inspect every manifest, detect installed applicat
 
 A missing symlink-mode target is linked into the repo. A missing copy-mode target is copied from the repo. Existing targets are inspected rather than overwritten.
 
-The current implementation uses `yq` to read YAML manifests. Per ADR-0001, dotfiles must not rely on `machines` to provide it; dependency handling is a dotfiles responsibility.
+The setup scripts use `yq` to read YAML manifests. If `yq` is already available, they use it. Otherwise they bootstrap the official precompiled binary into the user-local `.local/bin` directory, so a standalone dotfiles clone does not depend on `machines` or a system package manager for this prerequisite.
 
 ## Component commands
 
