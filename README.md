@@ -4,81 +4,109 @@ Personal configuration files shared across machines.
 
 ## Layout
 
-- `nvim/` — repository copy of the Neovim configuration
-- `dotfiles.code-workspace.template` — portable VS Code workspace template
-- `setup.sh` — compare/install/workspace helpers for macOS/Linux
-- `setup.ps1` — compare/install/workspace helpers for Windows
+- `<component>/` — tracked copy of an application's configuration.
+- `configs/<component>.yaml` — detection and natural-location metadata for that component.
+- `dotfiles.code-workspace.template` — portable VS Code workspace template.
+- `setup.sh` — config synchronization helper for macOS/Linux.
+- `setup.ps1` — config synchronization helper for Windows.
 
-Configs remain in their applications' natural locations. The repository keeps a separate tracked copy and the setup scripts compare the two without overwriting existing files.
+Configs remain in their applications' natural locations. The repository keeps a separate tracked copy; Git remains the source of history and rollback.
 
-## VS Code workspace
+## Automatic setup
 
-The tracked workspace template contains the dotfiles repository root and a placeholder for the machine's live Neovim config directory. Generate the machine-local workspace after cloning or pulling the repo.
+Run the setup script with no component to inspect every manifest, detect supported applications, and configure the ones that are installed:
 
 macOS/Linux:
 
 ```sh
-./setup.sh workspace
+./setup.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\setup.ps1 workspace
+.\setup.ps1
 ```
 
-This creates `dotfiles.code-workspace` in the repository root. The generated file is ignored by Git because it contains machine-specific absolute paths.
+For each detected application, a missing natural config is populated from the repo. An existing config is compared with the repo and never overwritten automatically.
 
-Resolved Neovim paths:
+`yq` is required to read the YAML manifests. The `machines` bootstrap installs it before invoking dotfiles setup.
 
-- macOS/Linux: `${XDG_CONFIG_HOME:-$HOME/.config}/nvim`
-- Windows: `%LOCALAPPDATA%\nvim`
+## Component manifests
 
-Open the generated workspace with VS Code:
+A manifest stores where an application's real config lives and how to detect the application. The manifest filename matches the tracked config directory.
 
-```sh
-code dotfiles.code-workspace
+```yaml
+# configs/nvim.yaml
+detect:
+  command: nvim
+
+target:
+  windows: "$LOCALAPPDATA/nvim"
+  macos: "$XDG_CONFIG_HOME/nvim"
+  linux: "$XDG_CONFIG_HOME/nvim"
 ```
 
-## Neovim
+On macOS/Linux, `$XDG_CONFIG_HOME` falls back to `~/.config` when unset.
 
-Natural config locations:
+## Synchronization
 
-- macOS/Linux: `~/.config/nvim` by default, or `$XDG_CONFIG_HOME/nvim` when `XDG_CONFIG_HOME` is set
-- Windows: `%LOCALAPPDATA%\nvim`
+Each component supports three directions/actions.
 
-### Compare
+### Status
 
-macOS/Linux:
+Compare the natural config with the tracked repo copy without changing either side:
 
 ```sh
 ./setup.sh nvim status
 ```
 
-Windows PowerShell:
-
 ```powershell
 .\setup.ps1 nvim status
 ```
 
-For each tracked file, the status command compares the live file with the repo copy. If they differ, it searches Git history for an exact content match and uses commit ancestry to determine whether the live copy is a known older version, a known newer version, divergent, or unknown.
+The comparison uses Git object hashes and history to distinguish files that are equal, known older/newer versions, missing, local-only, or unknown/divergent.
 
-Existing files are never overwritten by `status`.
+### Apply
 
-### Install when missing
-
-If the natural config directory does not exist:
+Copy the tracked repo config into the application's natural location:
 
 ```sh
-./setup.sh nvim install
+./setup.sh nvim apply
 ```
-
-or on Windows:
 
 ```powershell
-.\setup.ps1 nvim install
+.\setup.ps1 nvim apply
 ```
 
-`install` refuses to replace an existing config directory.
+`apply` only works when the natural config directory is absent. It refuses to replace an existing config.
+
+### Capture
+
+Copy the application's live config back into the repo working tree:
+
+```sh
+./setup.sh nvim capture
+```
+
+```powershell
+.\setup.ps1 nvim capture
+```
+
+`capture` refuses to run when that component already has uncommitted repo changes. The previous committed repo state remains recoverable through Git, and the resulting working-tree changes are shown with `git status`/`git diff` for normal review and commit.
 
 Symlink-based config setups are not supported.
+
+## VS Code workspace
+
+Generate the machine-local workspace after cloning or pulling the repo:
+
+```sh
+./setup.sh workspace
+```
+
+```powershell
+.\setup.ps1 workspace
+```
+
+The generated `dotfiles.code-workspace` is ignored by Git because it contains a machine-specific absolute Neovim config path resolved from `configs/nvim.yaml`.
