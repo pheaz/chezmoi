@@ -2,16 +2,20 @@
 set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+configs_dir="$repo_dir/configs"
 
 usage() {
   cat >&2 <<EOF
 Usage:
-  $0 nvim [status]
-  $0 nvim install
+  $0                         Configure all detected applications
+  $0 <component> [status]
+  $0 <component> apply
+  $0 <component> capture
   $0 workspace
 
 status    Compare the live config with the repo without changing anything.
-install   Copy the repo config into its natural location only if it is absent.
+apply     Copy the repo config to the application's natural location if absent.
+capture   Replace the repo copy with the live config, leaving the result as a Git working-tree change.
 workspace Generate a machine-local VS Code workspace from the tracked template.
 EOF
   exit 2
@@ -22,6 +26,63 @@ require_git_repo() {
     printf 'Not a Git worktree: %s\n' "$repo_dir" >&2
     exit 1
   }
+}
+
+require_yq() {
+  command -v yq >/dev/null 2>&1 || {
+    printf 'yq is required to read %s/*.yaml\n' "$configs_dir" >&2
+    exit 1
+  }
+}
+
+current_platform() {
+  case "$(uname -s)" in
+    Darwin) printf 'macos\n' ;;
+    Linux) printf 'linux\n' ;;
+    *) printf 'Unsupported platform: %s\n' "$(uname -s)" >&2; exit 1 ;;
+  esac
+}
+
+expand_target() {
+  value=$1
+
+  case "$value" in
+    '$HOME') printf '%s\n' "$HOME" ;;
+    '$HOME/'*) printf '%s/%s\n' "$HOME" "${value#\$HOME/}" ;;
+    '$XDG_CONFIG_HOME') printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}" ;;
+    '$XDG_CONFIG_HOME/'*) printf '%s/%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}" "${value#\$XDG_CONFIG_HOME/}" ;;
+    *) printf '%s\n' "$value" ;;
+  esac
+}
+
+manifest_for() {
+  printf '%s/%s.yaml\n' "$configs_dir" "$1"
+}
+
+load_component() {
+  component=$1
+  manifest=$(manifest_for "$component")
+
+  [ -f "$manifest" ] || {
+    printf 'Unknown component: %s\n' "$component" >&2
+    exit 1
+  }
+
+  source="$repo_dir/$component"
+  [ -d "$source" ] || {
+    printf 'Missing repo config directory: %s\n' "$source" >&2
+    exit 1
+  }
+
+  platform=$(current_platform)
+  target_template=$(PLATFORM="$platform" yq -r '.target[strenv(PLATFORM)] // ""' "$manifest")
+  [ -n "$target_template" ] || {
+    printf 'Component %s has no target for %s\n' "$component" "$platform" >&2
+    exit 1
+  }
+
+  target=$(expand_target "$target_template")
+  detect_command=$(yq -r '.detect.command // ""' "$manifest")
 }
 
 find_history_match() {
@@ -59,7 +120,7 @@ status_tree() {
 
   if [ ! -e "$target" ]; then
     printf '+ %s is missing locally\n' "$target"
-    printf '  Run: %s %s install\n' "$0" "$component"
+    printf '  Run: %s %s apply\n' "$0" "$component"
     return 0
   fi
 
@@ -184,31 +245,19 @@ status_tree() {
   done < "$tmp_target"
 
   printf '\nSummary for %s\n' "$component"
-  printf '  in sync:                  %s\n' "$same"
-  printf '  natural location behind:  %s\n' "$local_behind"
-  printf '  repo behind known version:%s\n' "$repo_behind"
-  printf '  missing locally:           %s\n' "$missing_local"
-  printf '  local-only files:          %s\n' "$local_only"
-  printf '  unknown/divergent:         %s\n' "$unknown"
+  printf '  in sync:                   %s\n' "$same"
+  printf '  natural location behind:   %s\n' "$local_behind"
+  printf '  repo behind known version: %s\n' "$repo_behind"
+  printf '  missing locally:            %s\n' "$missing_local"
+  printf '  local-only files:           %s\n' "$local_only"
+  printf '  unknown/divergent:          %s\n' "$unknown"
 
   if [ "$repo_dirty" -gt 0 ]; then
-    printf '  repo files modified:       %s\n' "$repo_dirty"
-  fi
-
-  if [ "$unknown" -eq 0 ] && [ "$repo_behind" -eq 0 ] && [ "$local_only" -eq 0 ]; then
-    if [ "$local_behind" -gt 0 ] || [ "$missing_local" -gt 0 ]; then
-      printf '\nResult: natural location is behind the repo.\n'
-    elif [ "$same" -gt 0 ]; then
-      printf '\nResult: natural location and repo are in sync.\n'
-    fi
-  elif [ "$unknown" -eq 0 ] && [ "$local_behind" -eq 0 ] && [ "$missing_local" -eq 0 ] && [ "$repo_behind" -gt 0 ] && [ "$local_only" -eq 0 ]; then
-    printf '\nResult: repo is behind a known natural-location version.\n'
-  else
-    printf '\nResult: the two copies have diverged or contain uncommitted/untracked differences.\n'
+    printf '  repo files modified:        %s\n' "$repo_dirty"
   fi
 }
 
-install_tree() {
+apply_tree() {
   component=$1
   source=$2
   target=$3
@@ -221,19 +270,49 @@ install_tree() {
 
   mkdir -p "$(dirname -- "$target")"
   cp -R "$source" "$target"
-  printf 'Installed %s -> %s\n' "$source" "$target"
+  printf 'Applied %s -> %s\n' "$source" "$target"
+}
+
+capture_tree() {
+  component=$1
+  source=$2
+  target=$3
+
+  if [ -L "$target" ] || [ ! -d "$target" ]; then
+    printf 'Cannot capture: expected a regular directory at %s\n' "$target" >&2
+    exit 1
+  fi
+
+  if [ -n "$(git -C "$repo_dir" status --porcelain -- "$component")" ]; then
+    printf 'Refusing to capture over existing repo changes in %s/\n' "$component" >&2
+    printf 'Commit, discard, or move those changes first.\n' >&2
+    exit 1
+  fi
+
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+  cp -R "$target"/. "$tmp"/
+
+  rm -rf "$source"
+  mkdir -p "$source"
+  cp -R "$tmp"/. "$source"/
+
+  printf 'Captured %s -> %s\n\n' "$target" "$source"
+  git -C "$repo_dir" status --short -- "$component"
+  git -C "$repo_dir" diff -- "$component" || true
 }
 
 generate_workspace() {
   template="$repo_dir/dotfiles.code-workspace.template"
   output="$repo_dir/dotfiles.code-workspace"
-  nvim_config="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
 
   [ -f "$template" ] || {
     printf 'Missing workspace template: %s\n' "$template" >&2
     exit 1
   }
 
+  load_component nvim
+  nvim_config=$target
   json_path=$(printf '%s' "$nvim_config" | sed 's/\\/\\\\/g; s/"/\\"/g')
   sed_path=$(printf '%s' "$json_path" | sed 's/[&|]/\\&/g')
   sed "s|__NVIM_CONFIG__|$sed_path|g" "$template" > "$output"
@@ -242,26 +321,54 @@ generate_workspace() {
   printf '  nvim config: %s\n' "$nvim_config"
 }
 
-require_git_repo
+auto_setup() {
+  found=0
 
-component=${1:-}
+  for manifest in "$configs_dir"/*.yaml; do
+    [ -e "$manifest" ] || continue
+    found=1
+    component=$(basename "$manifest" .yaml)
+    load_component "$component"
+
+    if [ -n "$detect_command" ] && ! command -v "$detect_command" >/dev/null 2>&1; then
+      printf 'Skipping %s: %s not detected\n' "$component" "$detect_command"
+      continue
+    fi
+
+    printf '\n== %s ==\n' "$component"
+    if [ -e "$target" ] || [ -L "$target" ]; then
+      status_tree "$component" "$source" "$target"
+    else
+      apply_tree "$component" "$source" "$target"
+    fi
+  done
+
+  [ "$found" -eq 1 ] || printf 'No config manifests found in %s\n' "$configs_dir" >&2
+}
+
+require_git_repo
+require_yq
+
+if [ "$#" -eq 0 ]; then
+  auto_setup
+  exit 0
+fi
+
+component=$1
 action=${2:-status}
 
-case "$component" in
-  workspace)
-    [ "$#" -eq 1 ] || usage
-    generate_workspace
-    exit 0
-    ;;
-  nvim)
-    source="$repo_dir/nvim"
-    target="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
-    ;;
-  *) usage ;;
-esac
+if [ "$component" = workspace ]; then
+  [ "$#" -eq 1 ] || usage
+  generate_workspace
+  exit 0
+fi
+
+[ "$#" -le 2 ] || usage
+load_component "$component"
 
 case "$action" in
   status) status_tree "$component" "$source" "$target" ;;
-  install) install_tree "$component" "$source" "$target" ;;
+  apply|install) apply_tree "$component" "$source" "$target" ;;
+  capture) capture_tree "$component" "$source" "$target" ;;
   *) usage ;;
 esac
