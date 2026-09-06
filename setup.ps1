@@ -1,6 +1,6 @@
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('nvim')]
+    [ValidateSet('nvim', 'workspace')]
     [string]$Component,
 
     [Parameter(Position = 1)]
@@ -179,8 +179,31 @@ function Install-ConfigTree([string]$Source, [string]$Target) {
     Write-Host "Installed $Source -> $Target"
 }
 
+function New-WorkspaceFile {
+    $template = Join-Path $RepoDir 'dotfiles.code-workspace.template'
+    $output = Join-Path $RepoDir 'dotfiles.code-workspace'
+    $nvimConfig = Join-Path $env:LOCALAPPDATA 'nvim'
+
+    if (-not (Test-Path -LiteralPath $template -PathType Leaf)) {
+        throw "Missing workspace template: $template"
+    }
+
+    $escapedNvimConfig = $nvimConfig.Replace('\', '\\').Replace('"', '\"')
+    $content = [IO.File]::ReadAllText($template).Replace('__NVIM_CONFIG__', $escapedNvimConfig)
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText($output, $content, $utf8NoBom)
+
+    Write-Host "Generated $output"
+    Write-Host "  nvim config: $nvimConfig"
+}
+
 & git -C $RepoDir rev-parse --is-inside-work-tree *> $null
 if ($LASTEXITCODE -ne 0) { throw "Not a Git worktree: $RepoDir" }
+
+if ($Component -eq 'workspace') {
+    New-WorkspaceFile
+    exit 0
+}
 
 switch ($Component) {
     'nvim' {
