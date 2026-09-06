@@ -17,8 +17,11 @@ Dotfiles owns, per component:
 
 This metadata is stored in `configs/<component>.yaml`. The tracked source is implicit as `<repo>/<component>`.
 
+A component may intentionally omit targets for platforms it does not support. Automatic setup skips that component on an unsupported platform. Explicit component commands report that the component has no target for the current platform.
+
 ## Consequences
 
 - `machines` does not maintain package-to-config mappings.
 - Dotfiles can auto-configure supported applications already present on a machine.
+- Platform-specific applications can be represented without fake targets for other platforms.
 - Application config knowledge has one owner.
