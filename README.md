@@ -2,19 +2,70 @@
 
 Personal configuration files shared across machines.
 
+The canonical checkout used by `machines` is `~/.dotfiles`. The setup scripts themselves do not depend on that path: they derive every config source from the location of the repository, so the repo can still be cloned elsewhere intentionally.
+
 ## Layout
 
-- `<component>/` — tracked copy of an application's configuration.
-- `configs/<component>.yaml` — detection and natural-location metadata for that component.
-- `dotfiles.code-workspace.template` — portable VS Code workspace template.
-- `setup.sh` — config synchronization helper for macOS/Linux.
-- `setup.ps1` — config synchronization helper for Windows.
+- `<component>/` — the tracked application configuration.
+- `configs/<component>.yaml` — detection, installation mode, and natural target location.
+- `dotfiles.code-workspace` — tracked VS Code workspace using only relative paths.
+- `setup.sh` — setup helper for macOS/Linux.
+- `setup.ps1` — setup helper for Windows.
 
-Configs remain in their applications' natural locations. The repository keeps a separate tracked copy; Git remains the source of history and rollback.
+## Component manifests
+
+Each application owns a small manifest. The filename matches the tracked config directory.
+
+```yaml
+# configs/nvim.yaml
+detect:
+  command: nvim
+
+mode: symlink
+
+target:
+  windows: "$LOCALAPPDATA/nvim"
+  macos: "$XDG_CONFIG_HOME/nvim"
+  linux: "$XDG_CONFIG_HOME/nvim"
+```
+
+On macOS/Linux, `$XDG_CONFIG_HOME` falls back to `~/.config` when unset.
+
+The source is implicit: `configs/nvim.yaml` configures the tracked `nvim/` directory in this repository. No checkout path is stored in the manifest.
+
+## Modes
+
+### `symlink`
+
+Preferred when the application works normally with symlinked configuration.
+
+For Neovim, a checkout at `~/.dotfiles` produces:
+
+```text
+~/.config/nvim -> ~/.dotfiles/nvim
+```
+
+On Windows the equivalent target is `%LOCALAPPDATA%\nvim` and points to the repository's `nvim` directory.
+
+There is only one copy of the configuration, so edits made through either path immediately modify the Git working tree.
+
+If the natural target already exists as a real directory, setup refuses to replace it. `status` compares that directory with the repo first, and `capture` can import it into the repo working tree before migration if needed.
+
+### `copy`
+
+Available for applications that should not or cannot use symlinks. The repo and natural application location are separate copies.
+
+For copy-mode components:
+
+- `status` compares the two copies and uses Git history when possible to identify known older/newer versions.
+- `apply` copies the repo configuration to a missing natural location.
+- `capture` copies a real natural config directory back into the repo working tree.
+
+`capture` refuses to overwrite existing uncommitted changes for that component. Git remains the source of history and rollback.
 
 ## Automatic setup
 
-Run the setup script with no component to inspect every manifest, detect supported applications, and configure the ones that are installed:
+Run setup with no component to inspect every manifest, detect installed applications, and configure them according to their mode:
 
 macOS/Linux:
 
@@ -28,34 +79,13 @@ Windows PowerShell:
 .\setup.ps1
 ```
 
-For each detected application, a missing natural config is populated from the repo. An existing config is compared with the repo and never overwritten automatically.
+A missing symlink-mode target is linked into the repo. A missing copy-mode target is copied from the repo. Existing targets are inspected rather than overwritten.
 
 `yq` is required to read the YAML manifests. The `machines` bootstrap installs it before invoking dotfiles setup.
 
-## Component manifests
+## Component commands
 
-A manifest stores where an application's real config lives and how to detect the application. The manifest filename matches the tracked config directory.
-
-```yaml
-# configs/nvim.yaml
-detect:
-  command: nvim
-
-target:
-  windows: "$LOCALAPPDATA/nvim"
-  macos: "$XDG_CONFIG_HOME/nvim"
-  linux: "$XDG_CONFIG_HOME/nvim"
-```
-
-On macOS/Linux, `$XDG_CONFIG_HOME` falls back to `~/.config` when unset.
-
-## Synchronization
-
-Each component supports three directions/actions.
-
-### Status
-
-Compare the natural config with the tracked repo copy without changing either side:
+Inspect a component:
 
 ```sh
 ./setup.sh nvim status
@@ -65,11 +95,7 @@ Compare the natural config with the tracked repo copy without changing either si
 .\setup.ps1 nvim status
 ```
 
-The comparison uses Git object hashes and history to distinguish files that are equal, known older/newer versions, missing, local-only, or unknown/divergent.
-
-### Apply
-
-Copy the tracked repo config into the application's natural location:
+Apply its configured strategy:
 
 ```sh
 ./setup.sh nvim apply
@@ -79,11 +105,7 @@ Copy the tracked repo config into the application's natural location:
 .\setup.ps1 nvim apply
 ```
 
-`apply` only works when the natural config directory is absent. It refuses to replace an existing config.
-
-### Capture
-
-Copy the application's live config back into the repo working tree:
+Capture an existing real config directory into the repo working tree when needed:
 
 ```sh
 ./setup.sh nvim capture
@@ -93,20 +115,14 @@ Copy the application's live config back into the repo working tree:
 .\setup.ps1 nvim capture
 ```
 
-`capture` refuses to run when that component already has uncommitted repo changes. The previous committed repo state remains recoverable through Git, and the resulting working-tree changes are shown with `git status`/`git diff` for normal review and commit.
-
-Symlink-based config setups are not supported.
+Once a symlink-mode component is correctly linked, `capture` is unnecessary because the application is already editing the tracked files directly.
 
 ## VS Code workspace
 
-Generate the machine-local workspace after cloning or pulling the repo:
+`dotfiles.code-workspace` is tracked directly and contains only the repository root as a relative folder. No machine-specific generation step is required.
+
+Open it with:
 
 ```sh
-./setup.sh workspace
+code ~/.dotfiles/dotfiles.code-workspace
 ```
-
-```powershell
-.\setup.ps1 workspace
-```
-
-The generated `dotfiles.code-workspace` is ignored by Git because it contains a machine-specific absolute Neovim config path resolved from `configs/nvim.yaml`.
