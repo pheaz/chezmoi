@@ -1,0 +1,7 @@
+detect:
+  command: nvim
+
+target:
+  windows: "$LOCALAPPDATA/nvim"
+  macos: "$XDG_CONFIG_HOME/nvim"
+  linux: "$XDG_CONFIG_HOME/nvim"
