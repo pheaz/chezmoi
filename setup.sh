@@ -11,12 +11,10 @@ Usage:
   $0 <component> [status]
   $0 <component> apply
   $0 <component> capture
-  $0 workspace
 
-status    Compare the live config with the repo without changing anything.
-apply     Copy the repo config to the application's natural location if absent.
-capture   Replace the repo copy with the live config, leaving the result as a Git working-tree change.
-workspace Generate a machine-local VS Code workspace from the tracked template.
+status    Inspect how the natural config relates to the repo.
+apply     Configure the application according to the component mode.
+capture   Import an existing real config directory into the repo working tree.
 EOF
   exit 2
 }
@@ -83,6 +81,12 @@ load_component() {
 
   target=$(expand_target "$target_template")
   detect_command=$(yq -r '.detect.command // ""' "$manifest")
+  mode=$(yq -r '.mode // "copy"' "$manifest")
+
+  case "$mode" in
+    symlink|copy) ;;
+    *) printf 'Unsupported mode for %s: %s\n' "$component" "$mode" >&2; exit 1 ;;
+  esac
 }
 
 find_history_match() {
@@ -114,7 +118,7 @@ status_tree() {
   target=$3
 
   if [ -L "$target" ]; then
-    printf '! %s is a symlink; symlink setups are unsupported\n' "$target"
+    printf '! %s is a symlink; copy-mode comparison expects a real directory\n' "$target"
     return 1
   fi
 
@@ -131,7 +135,6 @@ status_tree() {
 
   tmp_source=$(mktemp)
   tmp_target=$(mktemp)
-  trap 'rm -f "$tmp_source" "$tmp_target"' EXIT HUP INT TERM
 
   git -C "$repo_dir" -c core.quotePath=false ls-files -- "$component" | LC_ALL=C sort > "$tmp_source"
   find "$target" -type f -print | LC_ALL=C sort > "$tmp_target"
@@ -244,6 +247,8 @@ status_tree() {
     local_only=$((local_only + 1))
   done < "$tmp_target"
 
+  rm -f "$tmp_source" "$tmp_target"
+
   printf '\nSummary for %s\n' "$component"
   printf '  in sync:                   %s\n' "$same"
   printf '  natural location behind:   %s\n' "$local_behind"
@@ -255,6 +260,59 @@ status_tree() {
   if [ "$repo_dirty" -gt 0 ]; then
     printf '  repo files modified:        %s\n' "$repo_dirty"
   fi
+}
+
+link_destination() {
+  target=$1
+
+  if [ ! -L "$target" ]; then
+    return 1
+  fi
+
+  if [ -d "$target" ]; then
+    CDPATH= cd -- "$target" 2>/dev/null && pwd -P
+    return
+  fi
+
+  return 1
+}
+
+status_symlink() {
+  component=$1
+  source=$2
+  target=$3
+
+  if [ -L "$target" ]; then
+    expected=$(CDPATH= cd -- "$source" && pwd -P)
+    actual=$(link_destination "$target" || true)
+
+    if [ "$actual" = "$expected" ]; then
+      printf '= %s -> %s\n' "$target" "$source"
+      return 0
+    fi
+
+    if [ -z "$actual" ]; then
+      printf '! %s is a broken symlink\n' "$target" >&2
+    else
+      printf '! %s points to %s, expected %s\n' "$target" "$actual" "$expected" >&2
+    fi
+    return 1
+  fi
+
+  if [ -e "$target" ]; then
+    if [ -d "$target" ]; then
+      printf '! %s is a real directory; expected a symlink to %s\n' "$target" "$source"
+      printf '  Comparing the existing directory before migration:\n\n'
+      status_tree "$component" "$source" "$target"
+      return
+    fi
+
+    printf '! %s exists but is not a directory symlink\n' "$target" >&2
+    return 1
+  fi
+
+  printf '+ %s is missing\n' "$target"
+  printf '  Run: %s %s apply\n' "$0" "$component"
 }
 
 apply_tree() {
@@ -273,13 +331,40 @@ apply_tree() {
   printf 'Applied %s -> %s\n' "$source" "$target"
 }
 
+apply_symlink() {
+  component=$1
+  source=$2
+  target=$3
+
+  if [ -L "$target" ]; then
+    expected=$(CDPATH= cd -- "$source" && pwd -P)
+    actual=$(link_destination "$target" || true)
+    if [ "$actual" = "$expected" ]; then
+      printf '%s is already linked to %s\n' "$target" "$source"
+      return 0
+    fi
+    printf 'Refusing to replace existing symlink %s\n' "$target" >&2
+    exit 1
+  fi
+
+  if [ -e "$target" ]; then
+    printf 'Refusing to replace existing %s\n' "$target" >&2
+    printf 'Run "%s %s status" first; capture it if needed, then move/remove it before applying.\n' "$0" "$component" >&2
+    exit 1
+  fi
+
+  mkdir -p "$(dirname -- "$target")"
+  ln -s "$source" "$target"
+  printf 'Linked %s -> %s\n' "$target" "$source"
+}
+
 capture_tree() {
   component=$1
   source=$2
   target=$3
 
   if [ -L "$target" ] || [ ! -d "$target" ]; then
-    printf 'Cannot capture: expected a regular directory at %s\n' "$target" >&2
+    printf 'Cannot capture: expected a real directory at %s\n' "$target" >&2
     exit 1
   fi
 
@@ -302,23 +387,27 @@ capture_tree() {
   git -C "$repo_dir" diff -- "$component" || true
 }
 
-generate_workspace() {
-  template="$repo_dir/dotfiles.code-workspace.template"
-  output="$repo_dir/dotfiles.code-workspace"
+status_component() {
+  case "$mode" in
+    symlink) status_symlink "$component" "$source" "$target" ;;
+    copy) status_tree "$component" "$source" "$target" ;;
+  esac
+}
 
-  [ -f "$template" ] || {
-    printf 'Missing workspace template: %s\n' "$template" >&2
-    exit 1
-  }
+apply_component() {
+  case "$mode" in
+    symlink) apply_symlink "$component" "$source" "$target" ;;
+    copy) apply_tree "$component" "$source" "$target" ;;
+  esac
+}
 
-  load_component nvim
-  nvim_config=$target
-  json_path=$(printf '%s' "$nvim_config" | sed 's/\\/\\\\/g; s/"/\\"/g')
-  sed_path=$(printf '%s' "$json_path" | sed 's/[&|]/\\&/g')
-  sed "s|__NVIM_CONFIG__|$sed_path|g" "$template" > "$output"
+capture_component() {
+  if [ "$mode" = symlink ] && [ -L "$target" ]; then
+    printf '%s is already a symlink into the repo; there is nothing to capture.\n' "$target"
+    return 0
+  fi
 
-  printf 'Generated %s\n' "$output"
-  printf '  nvim config: %s\n' "$nvim_config"
+  capture_tree "$component" "$source" "$target"
 }
 
 auto_setup() {
@@ -337,9 +426,9 @@ auto_setup() {
 
     printf '\n== %s ==\n' "$component"
     if [ -e "$target" ] || [ -L "$target" ]; then
-      status_tree "$component" "$source" "$target"
+      status_component
     else
-      apply_tree "$component" "$source" "$target"
+      apply_component
     fi
   done
 
@@ -357,18 +446,12 @@ fi
 component=$1
 action=${2:-status}
 
-if [ "$component" = workspace ]; then
-  [ "$#" -eq 1 ] || usage
-  generate_workspace
-  exit 0
-fi
-
 [ "$#" -le 2 ] || usage
 load_component "$component"
 
 case "$action" in
-  status) status_tree "$component" "$source" "$target" ;;
-  apply|install) apply_tree "$component" "$source" "$target" ;;
-  capture) capture_tree "$component" "$source" "$target" ;;
+  status) status_component ;;
+  apply) apply_component ;;
+  capture) capture_component ;;
   *) usage ;;
 esac
