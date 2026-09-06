@@ -1,15 +1,15 @@
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('nvim', 'workspace')]
     [string]$Component,
 
     [Parameter(Position = 1)]
-    [ValidateSet('status', 'install')]
+    [ValidateSet('status', 'apply', 'capture', 'install')]
     [string]$Action = 'status'
 )
 
 $ErrorActionPreference = 'Stop'
 $RepoDir = $PSScriptRoot
+$ConfigsDir = Join-Path $RepoDir 'configs'
 
 function Get-BlobHash([string]$Path) {
     return (& git -C $RepoDir hash-object -- $Path).Trim()
@@ -32,6 +32,48 @@ function Show-Match([string]$Commit) {
     & git -C $RepoDir show -s --format='    matches: %h %cs %s' $Commit
 }
 
+function Resolve-TargetPath([string]$Value) {
+    if ($Value -eq '$HOME') { return $HOME }
+    if ($Value.StartsWith('$HOME/')) {
+        return Join-Path $HOME $Value.Substring('$HOME/'.Length)
+    }
+    if ($Value -eq '$LOCALAPPDATA') { return $env:LOCALAPPDATA }
+    if ($Value.StartsWith('$LOCALAPPDATA/')) {
+        return Join-Path $env:LOCALAPPDATA $Value.Substring('$LOCALAPPDATA/'.Length)
+    }
+    if ($Value -eq '$APPDATA') { return $env:APPDATA }
+    if ($Value.StartsWith('$APPDATA/')) {
+        return Join-Path $env:APPDATA $Value.Substring('$APPDATA/'.Length)
+    }
+    return $Value
+}
+
+function Get-ComponentInfo([string]$Name) {
+    $manifest = Join-Path $ConfigsDir "$Name.yaml"
+    if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+        throw "Unknown component: $Name"
+    }
+
+    $source = Join-Path $RepoDir $Name
+    if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+        throw "Missing repo config directory: $source"
+    }
+
+    $targetTemplate = (& $script:Yq -r '.target.windows // ""' $manifest).Trim()
+    if (-not $targetTemplate) {
+        throw "Component $Name has no target for windows"
+    }
+
+    $detectCommand = (& $script:Yq -r '.detect.command // ""' $manifest).Trim()
+
+    return [pscustomobject]@{
+        Name = $Name
+        Source = $source
+        Target = Resolve-TargetPath $targetTemplate
+        DetectCommand = $detectCommand
+    }
+}
+
 function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Target) {
     $item = Get-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
     if ($item -and $item.LinkType) {
@@ -41,7 +83,7 @@ function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Targe
 
     if (-not (Test-Path -LiteralPath $Target)) {
         Write-Host "+ $Target is missing locally"
-        Write-Host "  Run: .\setup.ps1 $ComponentName install"
+        Write-Host "  Run: .\setup.ps1 $ComponentName apply"
         return
     }
 
@@ -148,7 +190,7 @@ function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Targe
         $unknown++
     }
 
-    $localFiles = Get-ChildItem -LiteralPath $Target -File -Recurse
+    $localFiles = Get-ChildItem -LiteralPath $Target -File -Recurse -Force
     foreach ($file in $localFiles) {
         $rel = [IO.Path]::GetRelativePath($Target, $file.FullName).Replace('\', '/')
         if ($tracked.ContainsKey($rel)) { continue }
@@ -170,49 +212,115 @@ function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Targe
     if ($repoDirty -gt 0) { Write-Host "  repo files modified:        $repoDirty" }
 }
 
-function Install-ConfigTree([string]$Source, [string]$Target) {
-    if (Test-Path -LiteralPath $Target) {
+function Apply-ConfigTree([string]$ComponentName, [string]$Source, [string]$Target) {
+    if (Get-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue) {
         throw "Refusing to replace existing $Target. Run status first."
     }
     New-Item -ItemType Directory -Path (Split-Path -Parent $Target) -Force | Out-Null
     Copy-Item -LiteralPath $Source -Destination $Target -Recurse
-    Write-Host "Installed $Source -> $Target"
+    Write-Host "Applied $Source -> $Target"
+}
+
+function Capture-ConfigTree([string]$ComponentName, [string]$Source, [string]$Target) {
+    $targetItem = Get-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
+    if (-not $targetItem -or -not $targetItem.PSIsContainer -or $targetItem.LinkType) {
+        throw "Cannot capture: expected a regular directory at $Target"
+    }
+
+    $repoChanges = @(& git -C $RepoDir status --porcelain -- $ComponentName)
+    if ($repoChanges.Count -gt 0) {
+        throw "Refusing to capture over existing repo changes in $ComponentName/. Commit, discard, or move those changes first."
+    }
+
+    $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-" + [guid]::NewGuid().ToString('N'))
+    $tempConfig = Join-Path $tempRoot 'config'
+    New-Item -ItemType Directory -Path $tempRoot | Out-Null
+
+    try {
+        Copy-Item -LiteralPath $Target -Destination $tempConfig -Recurse -Force
+        if (Test-Path -LiteralPath $Source) {
+            Remove-Item -LiteralPath $Source -Recurse -Force
+        }
+        Move-Item -LiteralPath $tempConfig -Destination $Source
+    }
+    finally {
+        if (Test-Path -LiteralPath $tempRoot) {
+            Remove-Item -LiteralPath $tempRoot -Recurse -Force
+        }
+    }
+
+    Write-Host "Captured $Target -> $Source`n"
+    & git -C $RepoDir status --short -- $ComponentName
+    & git -C $RepoDir diff -- $ComponentName
 }
 
 function New-WorkspaceFile {
     $template = Join-Path $RepoDir 'dotfiles.code-workspace.template'
     $output = Join-Path $RepoDir 'dotfiles.code-workspace'
-    $nvimConfig = Join-Path $env:LOCALAPPDATA 'nvim'
 
     if (-not (Test-Path -LiteralPath $template -PathType Leaf)) {
         throw "Missing workspace template: $template"
     }
 
-    $escapedNvimConfig = $nvimConfig.Replace('\', '\\').Replace('"', '\"')
+    $nvim = Get-ComponentInfo 'nvim'
+    $escapedNvimConfig = $nvim.Target.Replace('\', '\\').Replace('"', '\"')
     $content = [IO.File]::ReadAllText($template).Replace('__NVIM_CONFIG__', $escapedNvimConfig)
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [IO.File]::WriteAllText($output, $content, $utf8NoBom)
 
     Write-Host "Generated $output"
-    Write-Host "  nvim config: $nvimConfig"
+    Write-Host "  nvim config: $($nvim.Target)"
+}
+
+function Invoke-AutoSetup {
+    $manifests = @(Get-ChildItem -LiteralPath $ConfigsDir -Filter '*.yaml' -File | Sort-Object Name)
+    if ($manifests.Count -eq 0) {
+        Write-Host "No config manifests found in $ConfigsDir"
+        return
+    }
+
+    foreach ($manifest in $manifests) {
+        $name = [IO.Path]::GetFileNameWithoutExtension($manifest.Name)
+        $info = Get-ComponentInfo $name
+
+        if ($info.DetectCommand -and -not (Get-Command $info.DetectCommand -ErrorAction SilentlyContinue)) {
+            Write-Host "Skipping $name`: $($info.DetectCommand) not detected"
+            continue
+        }
+
+        Write-Host "`n== $name =="
+        if (Get-Item -LiteralPath $info.Target -Force -ErrorAction SilentlyContinue) {
+            Test-ConfigTree $info.Name $info.Source $info.Target
+        }
+        else {
+            Apply-ConfigTree $info.Name $info.Source $info.Target
+        }
+    }
 }
 
 & git -C $RepoDir rev-parse --is-inside-work-tree *> $null
 if ($LASTEXITCODE -ne 0) { throw "Not a Git worktree: $RepoDir" }
+
+$script:Yq = (Get-Command yq -ErrorAction SilentlyContinue).Source
+if (-not $script:Yq) {
+    throw "yq is required to read $ConfigsDir\*.yaml"
+}
+
+if (-not $Component) {
+    Invoke-AutoSetup
+    exit 0
+}
 
 if ($Component -eq 'workspace') {
     New-WorkspaceFile
     exit 0
 }
 
-switch ($Component) {
-    'nvim' {
-        $source = Join-Path $RepoDir 'nvim'
-        $target = Join-Path $env:LOCALAPPDATA 'nvim'
-    }
-}
+$info = Get-ComponentInfo $Component
 
 switch ($Action) {
-    'status'  { Test-ConfigTree $Component $source $target }
-    'install' { Install-ConfigTree $source $target }
+    'status'  { Test-ConfigTree $info.Name $info.Source $info.Target }
+    'apply'   { Apply-ConfigTree $info.Name $info.Source $info.Target }
+    'install' { Apply-ConfigTree $info.Name $info.Source $info.Target }
+    'capture' { Capture-ConfigTree $info.Name $info.Source $info.Target }
 }
