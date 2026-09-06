@@ -1,6 +1,8 @@
 detect:
   command: nvim
 
+mode: symlink
+
 target:
   windows: "$LOCALAPPDATA/nvim"
   macos: "$XDG_CONFIG_HOME/nvim"
