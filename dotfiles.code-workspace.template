@@ -1,0 +1,13 @@
+{
+  "folders": [
+    {
+      "name": "dotfiles",
+      "path": "."
+    },
+    {
+      "name": "nvim config",
+      "path": "__NVIM_CONFIG__"
+    }
+  ],
+  "settings": {}
+}
