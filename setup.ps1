@@ -3,7 +3,7 @@ param(
     [string]$Component,
 
     [Parameter(Position = 1)]
-    [ValidateSet('status', 'apply', 'capture', 'install')]
+    [ValidateSet('status', 'apply', 'capture')]
     [string]$Action = 'status'
 )
 
@@ -65,19 +65,24 @@ function Get-ComponentInfo([string]$Name) {
     }
 
     $detectCommand = (& $script:Yq -r '.detect.command // ""' $manifest).Trim()
+    $mode = (& $script:Yq -r '.mode // "copy"' $manifest).Trim()
+    if ($mode -notin @('symlink', 'copy')) {
+        throw "Unsupported mode for $Name`: $mode"
+    }
 
     return [pscustomobject]@{
         Name = $Name
         Source = $source
         Target = Resolve-TargetPath $targetTemplate
         DetectCommand = $detectCommand
+        Mode = $mode
     }
 }
 
 function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Target) {
     $item = Get-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
     if ($item -and $item.LinkType) {
-        Write-Host "! $Target is a symlink; symlink setups are unsupported"
+        Write-Host "! $Target is a symlink; copy-mode comparison expects a real directory"
         return
     }
 
@@ -212,6 +217,50 @@ function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Targe
     if ($repoDirty -gt 0) { Write-Host "  repo files modified:        $repoDirty" }
 }
 
+function Get-LinkDestination([System.IO.FileSystemInfo]$Item, [string]$TargetPath) {
+    $rawTarget = [string](@($Item.Target)[0])
+    if (-not $rawTarget) { return $null }
+
+    if ([IO.Path]::IsPathRooted($rawTarget)) {
+        return [IO.Path]::GetFullPath($rawTarget)
+    }
+
+    return [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $TargetPath) $rawTarget))
+}
+
+function Test-SymlinkConfig([string]$ComponentName, [string]$Source, [string]$Target) {
+    $item = Get-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
+
+    if ($item -and $item.LinkType) {
+        $expected = [IO.Path]::GetFullPath($Source).TrimEnd([char[]]'\/')
+        $actual = Get-LinkDestination $item $Target
+        if ($actual) { $actual = $actual.TrimEnd([char[]]'\/') }
+
+        if ($actual -and $actual.Equals($expected, [StringComparison]::OrdinalIgnoreCase)) {
+            Write-Host "= $Target -> $Source"
+            return
+        }
+
+        if (-not $actual) {
+            throw "$Target is a broken or unreadable symlink"
+        }
+        throw "$Target points to $actual, expected $expected"
+    }
+
+    if ($item) {
+        if ($item.PSIsContainer) {
+            Write-Host "! $Target is a real directory; expected a symlink to $Source"
+            Write-Host "  Comparing the existing directory before migration:`n"
+            Test-ConfigTree $ComponentName $Source $Target
+            return
+        }
+        throw "$Target exists but is not a directory symlink"
+    }
+
+    Write-Host "+ $Target is missing"
+    Write-Host "  Run: .\setup.ps1 $ComponentName apply"
+}
+
 function Apply-ConfigTree([string]$ComponentName, [string]$Source, [string]$Target) {
     if (Get-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue) {
         throw "Refusing to replace existing $Target. Run status first."
@@ -221,10 +270,30 @@ function Apply-ConfigTree([string]$ComponentName, [string]$Source, [string]$Targ
     Write-Host "Applied $Source -> $Target"
 }
 
+function Apply-SymlinkConfig([string]$ComponentName, [string]$Source, [string]$Target) {
+    $item = Get-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
+    if ($item) {
+        if ($item.LinkType) {
+            $expected = [IO.Path]::GetFullPath($Source).TrimEnd([char[]]'\/')
+            $actual = Get-LinkDestination $item $Target
+            if ($actual) { $actual = $actual.TrimEnd([char[]]'\/') }
+            if ($actual -and $actual.Equals($expected, [StringComparison]::OrdinalIgnoreCase)) {
+                Write-Host "$Target is already linked to $Source"
+                return
+            }
+        }
+        throw "Refusing to replace existing $Target. Run status first; capture it if needed, then move/remove it before applying."
+    }
+
+    New-Item -ItemType Directory -Path (Split-Path -Parent $Target) -Force | Out-Null
+    New-Item -ItemType SymbolicLink -Path $Target -Target $Source | Out-Null
+    Write-Host "Linked $Target -> $Source"
+}
+
 function Capture-ConfigTree([string]$ComponentName, [string]$Source, [string]$Target) {
     $targetItem = Get-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
     if (-not $targetItem -or -not $targetItem.PSIsContainer -or $targetItem.LinkType) {
-        throw "Cannot capture: expected a regular directory at $Target"
+        throw "Cannot capture: expected a real directory at $Target"
     }
 
     $repoChanges = @(& git -C $RepoDir status --porcelain -- $ComponentName)
@@ -254,22 +323,32 @@ function Capture-ConfigTree([string]$ComponentName, [string]$Source, [string]$Ta
     & git -C $RepoDir diff -- $ComponentName
 }
 
-function New-WorkspaceFile {
-    $template = Join-Path $RepoDir 'dotfiles.code-workspace.template'
-    $output = Join-Path $RepoDir 'dotfiles.code-workspace'
+function Invoke-Status($Info) {
+    if ($Info.Mode -eq 'symlink') {
+        Test-SymlinkConfig $Info.Name $Info.Source $Info.Target
+    }
+    else {
+        Test-ConfigTree $Info.Name $Info.Source $Info.Target
+    }
+}
 
-    if (-not (Test-Path -LiteralPath $template -PathType Leaf)) {
-        throw "Missing workspace template: $template"
+function Invoke-Apply($Info) {
+    if ($Info.Mode -eq 'symlink') {
+        Apply-SymlinkConfig $Info.Name $Info.Source $Info.Target
+    }
+    else {
+        Apply-ConfigTree $Info.Name $Info.Source $Info.Target
+    }
+}
+
+function Invoke-Capture($Info) {
+    $item = Get-Item -LiteralPath $Info.Target -Force -ErrorAction SilentlyContinue
+    if ($Info.Mode -eq 'symlink' -and $item -and $item.LinkType) {
+        Write-Host "$($Info.Target) is already a symlink into the repo; there is nothing to capture."
+        return
     }
 
-    $nvim = Get-ComponentInfo 'nvim'
-    $escapedNvimConfig = $nvim.Target.Replace('\', '\\').Replace('"', '\"')
-    $content = [IO.File]::ReadAllText($template).Replace('__NVIM_CONFIG__', $escapedNvimConfig)
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [IO.File]::WriteAllText($output, $content, $utf8NoBom)
-
-    Write-Host "Generated $output"
-    Write-Host "  nvim config: $($nvim.Target)"
+    Capture-ConfigTree $Info.Name $Info.Source $Info.Target
 }
 
 function Invoke-AutoSetup {
@@ -289,11 +368,12 @@ function Invoke-AutoSetup {
         }
 
         Write-Host "`n== $name =="
-        if (Get-Item -LiteralPath $info.Target -Force -ErrorAction SilentlyContinue) {
-            Test-ConfigTree $info.Name $info.Source $info.Target
+        $item = Get-Item -LiteralPath $info.Target -Force -ErrorAction SilentlyContinue
+        if ($item) {
+            Invoke-Status $info
         }
         else {
-            Apply-ConfigTree $info.Name $info.Source $info.Target
+            Invoke-Apply $info
         }
     }
 }
@@ -311,16 +391,10 @@ if (-not $Component) {
     exit 0
 }
 
-if ($Component -eq 'workspace') {
-    New-WorkspaceFile
-    exit 0
-}
-
 $info = Get-ComponentInfo $Component
 
 switch ($Action) {
-    'status'  { Test-ConfigTree $info.Name $info.Source $info.Target }
-    'apply'   { Apply-ConfigTree $info.Name $info.Source $info.Target }
-    'install' { Apply-ConfigTree $info.Name $info.Source $info.Target }
-    'capture' { Capture-ConfigTree $info.Name $info.Source $info.Target }
+    'status'  { Invoke-Status $info }
+    'apply'   { Invoke-Apply $info }
+    'capture' { Invoke-Capture $info }
 }
