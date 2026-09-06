@@ -8,9 +8,11 @@ usage() {
 Usage:
   $0 nvim [status]
   $0 nvim install
+  $0 workspace
 
-status   Compare the live config with the repo without changing anything.
-install  Copy the repo config into its natural location only if it is absent.
+status    Compare the live config with the repo without changing anything.
+install   Copy the repo config into its natural location only if it is absent.
+workspace Generate a machine-local VS Code workspace from the tracked template.
 EOF
   exit 2
 }
@@ -222,12 +224,35 @@ install_tree() {
   printf 'Installed %s -> %s\n' "$source" "$target"
 }
 
+generate_workspace() {
+  template="$repo_dir/dotfiles.code-workspace.template"
+  output="$repo_dir/dotfiles.code-workspace"
+  nvim_config="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
+
+  [ -f "$template" ] || {
+    printf 'Missing workspace template: %s\n' "$template" >&2
+    exit 1
+  }
+
+  json_path=$(printf '%s' "$nvim_config" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  sed_path=$(printf '%s' "$json_path" | sed 's/[&|]/\\&/g')
+  sed "s|__NVIM_CONFIG__|$sed_path|g" "$template" > "$output"
+
+  printf 'Generated %s\n' "$output"
+  printf '  nvim config: %s\n' "$nvim_config"
+}
+
 require_git_repo
 
 component=${1:-}
 action=${2:-status}
 
 case "$component" in
+  workspace)
+    [ "$#" -eq 1 ] || usage
+    generate_workspace
+    exit 0
+    ;;
   nvim)
     source="$repo_dir/nvim"
     target="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
