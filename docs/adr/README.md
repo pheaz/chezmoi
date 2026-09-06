@@ -11,3 +11,4 @@ All architectural decisions for this repository are recorded here. Accepted ADRs
 - [ADR-0007: Keep checkout location out of component manifests](0007-checkout-location.md)
 - [ADR-0008: Track a relative VS Code workspace](0008-relative-vscode-workspace.md)
 - [ADR-0009: Use native scripts instead of a general-purpose dotfile manager](0009-native-scripts.md)
+- [ADR-0010: Bootstrap direct prerequisites locally](0010-bootstrap-direct-prerequisites.md)
