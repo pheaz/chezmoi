@@ -14,9 +14,13 @@ A core boundary is that `dotfiles` never depends on `machines`. Any prerequisite
 
 - `<component>/` — the tracked application configuration.
 - `configs/<component>.yaml` — detection, installation mode, and natural target location.
+- `lib/sh/` — internal macOS/Linux implementation modules.
+- `lib/powershell/` — internal Windows implementation modules.
 - `dotfiles.code-workspace` — tracked VS Code workspace using only relative paths.
-- `setup.sh` — setup helper for macOS/Linux.
-- `setup.ps1` — setup helper for Windows.
+- `setup.sh` — public macOS/Linux CLI and orchestration entrypoint.
+- `setup.ps1` — public Windows CLI and orchestration entrypoint.
+
+The root setup scripts own the command-line flow and dispatch. Substantial platform-specific behavior is split by responsibility into `prerequisites`, `manifests`, `symlink`, and `copy` modules under `lib/`.
 
 ## Component manifests
 

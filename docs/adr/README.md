@@ -12,3 +12,4 @@ All architectural decisions for this repository are recorded here. Accepted ADRs
 - [ADR-0008: Track a relative VS Code workspace](0008-relative-vscode-workspace.md)
 - [ADR-0009: Use native scripts instead of a general-purpose dotfile manager](0009-native-scripts.md)
 - [ADR-0010: Bootstrap direct prerequisites locally](0010-bootstrap-direct-prerequisites.md)
+- [ADR-0011: Modularize native setup by platform and responsibility](0011-modular-native-setup.md)
