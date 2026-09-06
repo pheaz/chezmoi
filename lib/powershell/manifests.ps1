@@ -21,14 +21,8 @@ function Get-ComponentInfo([string]$Name) {
     }
 
     $source = Join-Path $RepoDir $Name
-    if (-not (Test-Path -LiteralPath $source -PathType Container)) {
-        throw "Missing repo config directory: $source"
-    }
-
     $targetTemplate = (& $script:Yq -r '.target.windows // ""' $manifest).Trim()
-    if (-not $targetTemplate) {
-        throw "Component $Name has no target for windows"
-    }
+    $target = if ($targetTemplate) { Resolve-TargetPath $targetTemplate } else { $null }
 
     $detectCommand = (& $script:Yq -r '.detect.command // ""' $manifest).Trim()
     $mode = (& $script:Yq -r '.mode // "copy"' $manifest).Trim()
@@ -39,7 +33,7 @@ function Get-ComponentInfo([string]$Name) {
     return [pscustomobject]@{
         Name = $Name
         Source = $source
-        Target = Resolve-TargetPath $targetTemplate
+        Target = $target
         DetectCommand = $detectCommand
         Mode = $mode
     }

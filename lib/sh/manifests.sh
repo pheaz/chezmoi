@@ -32,19 +32,13 @@ load_component() {
   }
 
   source="$repo_dir/$component"
-  [ -d "$source" ] || {
-    printf 'Missing repo config directory: %s\n' "$source" >&2
-    exit 1
-  }
-
   platform=$(current_platform)
   target_template=$(PLATFORM="$platform" yq -r '.target[strenv(PLATFORM)] // ""' "$manifest")
-  [ -n "$target_template" ] || {
-    printf 'Component %s has no target for %s\n' "$component" "$platform" >&2
-    exit 1
-  }
+  target=''
+  if [ -n "$target_template" ]; then
+    target=$(expand_target "$target_template")
+  fi
 
-  target=$(expand_target "$target_template")
   detect_command=$(yq -r '.detect.command // ""' "$manifest")
   mode=$(yq -r '.mode // "copy"' "$manifest")
 
@@ -52,4 +46,18 @@ load_component() {
     symlink|copy) ;;
     *) printf 'Unsupported mode for %s: %s\n' "$component" "$mode" >&2; exit 1 ;;
   esac
+}
+
+require_component_target() {
+  [ -n "$target" ] || {
+    printf 'Component %s has no target for %s\n' "$component" "$platform" >&2
+    exit 1
+  }
+}
+
+require_component_source() {
+  [ -d "$source" ] || {
+    printf 'Missing repo config directory: %s\n' "$source" >&2
+    exit 1
+  }
 }

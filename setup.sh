@@ -63,8 +63,23 @@ auto_setup() {
     component=$(basename "$manifest" .yaml)
     load_component "$component"
 
+    if [ -z "$target" ]; then
+      printf 'Skipping %s: no target for %s\n' "$component" "$platform"
+      continue
+    fi
+
     if [ -n "$detect_command" ] && ! command -v "$detect_command" >/dev/null 2>&1; then
       printf 'Skipping %s: %s not detected\n' "$component" "$detect_command"
+      continue
+    fi
+
+    if [ ! -d "$source" ]; then
+      if [ -d "$target" ] && [ ! -L "$target" ]; then
+        printf 'Skipping %s: repo config has not been captured yet\n' "$component"
+        printf '  Run: %s %s capture\n' "$0" "$component"
+      else
+        printf 'Skipping %s: missing repo config directory %s\n' "$component" "$source"
+      fi
       continue
     fi
 
@@ -92,10 +107,19 @@ action=${2:-status}
 
 [ "$#" -le 2 ] || usage
 load_component "$component"
+require_component_target
 
 case "$action" in
-  status) status_component ;;
-  apply) apply_component ;;
-  capture) capture_component ;;
+  status)
+    require_component_source
+    status_component
+    ;;
+  apply)
+    require_component_source
+    apply_component
+    ;;
+  capture)
+    capture_component
+    ;;
   *) usage ;;
 esac

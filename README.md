@@ -43,6 +43,8 @@ On macOS/Linux, `$XDG_CONFIG_HOME` falls back to `~/.config` when unset.
 
 The source is implicit: `configs/nvim.yaml` configures the tracked `nvim/` directory in this repository. No checkout path is stored in the manifest.
 
+A component may omit targets for platforms it does not support. Automatic setup skips those components on unsupported platforms; explicit component commands report that no target exists for the current platform.
+
 ## Modes
 
 ### `symlink`
@@ -57,7 +59,7 @@ For Neovim, a checkout at `~/.dotfiles` produces:
 
 There is only one copy of the configuration, so edits made through either path immediately modify the Git working tree.
 
-If the natural target already exists as a real directory, setup refuses to replace it. `status` compares that directory with the repo first, and `capture` can import it into the repo working tree before migration if needed.
+If the natural target already exists as a real directory, setup refuses to replace it. `status` compares that directory with the repo first, and `capture` can import it into the repo working tree before migration if needed. For a new component whose tracked source does not exist yet, `capture` may initialize that source directly from the existing real config directory.
 
 ### `copy`
 
@@ -83,7 +85,7 @@ Run setup with no component to inspect every manifest, detect installed applicat
 .\setup.ps1
 ```
 
-A missing symlink-mode target is linked into the repo. A missing copy-mode target is copied from the repo. Existing targets are inspected rather than overwritten.
+A missing symlink-mode target is linked into the repo. A missing copy-mode target is copied from the repo. Existing targets are inspected rather than overwritten. Components without a target for the current platform are skipped.
 
 The setup scripts use `yq` to read YAML manifests. If `yq` is already available, they use it. Otherwise they bootstrap the official precompiled binary into the user-local `.local/bin` directory, so a standalone dotfiles clone does not depend on `machines` or a system package manager for this prerequisite.
 

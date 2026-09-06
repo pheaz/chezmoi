@@ -55,8 +55,25 @@ function Invoke-AutoSetup {
         $name = [IO.Path]::GetFileNameWithoutExtension($manifest.Name)
         $info = Get-ComponentInfo $name
 
+        if (-not $info.Target) {
+            Write-Host "Skipping $name`: no target for windows"
+            continue
+        }
+
         if ($info.DetectCommand -and -not (Get-Command $info.DetectCommand -ErrorAction SilentlyContinue)) {
             Write-Host "Skipping $name`: $($info.DetectCommand) not detected"
+            continue
+        }
+
+        if (-not (Test-Path -LiteralPath $info.Source -PathType Container)) {
+            $item = Get-Item -LiteralPath $info.Target -Force -ErrorAction SilentlyContinue
+            if ($item -and $item.PSIsContainer -and -not $item.LinkType) {
+                Write-Host "Skipping $name`: repo config has not been captured yet"
+                Write-Host "  Run: .\setup.ps1 $name capture"
+            }
+            else {
+                Write-Host "Skipping $name`: missing repo config directory $($info.Source)"
+            }
             continue
         }
 
@@ -82,6 +99,13 @@ if (-not $Component) {
 }
 
 $info = Get-ComponentInfo $Component
+if (-not $info.Target) {
+    throw "Component $Component has no target for windows"
+}
+
+if ($Action -ne 'capture' -and -not (Test-Path -LiteralPath $info.Source -PathType Container)) {
+    throw "Missing repo config directory: $($info.Source)"
+}
 
 switch ($Action) {
     'status'  { Invoke-Status $info }
