@@ -2,7 +2,13 @@
 
 Personal configuration files shared across machines.
 
-The canonical checkout used by `machines` is `~/.dotfiles`. The setup scripts themselves do not depend on that path: they derive every config source from the location of the repository, so the repo can still be cloned elsewhere intentionally.
+The setup scripts are standalone and derive config sources from the repository location. `~/.dotfiles` is the canonical checkout used by `machines`, but the repo can be cloned elsewhere intentionally.
+
+## Architecture decisions
+
+Accepted architectural decisions live in [`docs/adr/`](docs/adr/). New architectural changes should be recorded there before implementation changes are made.
+
+A core boundary is that `dotfiles` never depends on `machines`. Any prerequisite needed by dotfiles must be satisfied by dotfiles itself or be an explicit standalone prerequisite; `machines` is never part of the contract.
 
 ## Layout
 
@@ -45,8 +51,6 @@ For Neovim, a checkout at `~/.dotfiles` produces:
 ~/.config/nvim -> ~/.dotfiles/nvim
 ```
 
-On Windows the equivalent target is `%LOCALAPPDATA%\nvim` and points to the repository's `nvim` directory.
-
 There is only one copy of the configuration, so edits made through either path immediately modify the Git working tree.
 
 If the natural target already exists as a real directory, setup refuses to replace it. `status` compares that directory with the repo first, and `capture` can import it into the repo working tree before migration if needed.
@@ -67,13 +71,9 @@ For copy-mode components:
 
 Run setup with no component to inspect every manifest, detect installed applications, and configure them according to their mode:
 
-macOS/Linux:
-
 ```sh
 ./setup.sh
 ```
-
-Windows PowerShell:
 
 ```powershell
 .\setup.ps1
@@ -81,38 +81,14 @@ Windows PowerShell:
 
 A missing symlink-mode target is linked into the repo. A missing copy-mode target is copied from the repo. Existing targets are inspected rather than overwritten.
 
-`yq` is required to read the YAML manifests. The `machines` bootstrap installs it before invoking dotfiles setup.
+The current implementation uses `yq` to read YAML manifests. Per ADR-0001, dotfiles must not rely on `machines` to provide it; dependency handling is a dotfiles responsibility.
 
 ## Component commands
 
-Inspect a component:
-
 ```sh
 ./setup.sh nvim status
-```
-
-```powershell
-.\setup.ps1 nvim status
-```
-
-Apply its configured strategy:
-
-```sh
 ./setup.sh nvim apply
-```
-
-```powershell
-.\setup.ps1 nvim apply
-```
-
-Capture an existing real config directory into the repo working tree when needed:
-
-```sh
 ./setup.sh nvim capture
-```
-
-```powershell
-.\setup.ps1 nvim capture
 ```
 
 Once a symlink-mode component is correctly linked, `capture` is unnecessary because the application is already editing the tracked files directly.
@@ -120,9 +96,3 @@ Once a symlink-mode component is correctly linked, `capture` is unnecessary beca
 ## VS Code workspace
 
 `dotfiles.code-workspace` is tracked directly and contains only the repository root as a relative folder. No machine-specific generation step is required.
-
-Open it with:
-
-```sh
-code ~/.dotfiles/dotfiles.code-workspace
-```
