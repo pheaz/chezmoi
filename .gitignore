@@ -5,4 +5,5 @@
 *.log
 session.*
 
+dotfiles.code-workspace
 nvim/plugin/packer_compiled.lua
