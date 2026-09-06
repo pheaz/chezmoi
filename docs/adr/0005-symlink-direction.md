@@ -19,9 +19,12 @@ Example:
 
 The reverse direction is not used.
 
+Before the initial symlink is established, `capture` may initialize a missing tracked component directory from an existing real natural config directory. The captured files are left uncommitted for normal Git review. Once the natural path is linked into the repo, capture is unnecessary.
+
 ## Consequences
 
-- The Git checkout is the physical source of truth.
+- The Git checkout is the physical source of truth after migration.
 - Editing through the application's natural path edits tracked files directly.
+- Existing application configuration can be imported without committing placeholder source files first.
 - No `capture` operation is needed once the link is established.
 - Moving the checkout requires repairing links, which is mitigated by the stable checkout convention recorded separately.
