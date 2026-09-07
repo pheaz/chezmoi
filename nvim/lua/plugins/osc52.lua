@@ -7,23 +7,29 @@ return {
     config = function()
       vim.opt.clipboard = "unnamedplus"
 
-      local osc52 = require("vim.ui.clipboard.osc52")
+      if vim.g.vscode and vim.g.vscode_clipboard then
+        vim.g.clipboard = vim.g.vscode_clipboard
+        return
+      end
 
-      vim.g.clipboard = {
-        name = "OSC 52",
-        copy = {
-          ["+"] = osc52.copy("+"),
-          ["*"] = osc52.copy("*"),
-        },
-        paste = {
-          ["+"] = function()
-            return { vim.fn.getreg('"') }, vim.fn.getregtype('"')
-          end,
-          ["*"] = function()
-            return { vim.fn.getreg('"') }, vim.fn.getregtype('"')
-          end,
-        },
-      }
+      if vim.env.SSH_TTY or vim.env.SSH_CONNECTION then
+        local osc52 = require("vim.ui.clipboard.osc52")
+
+        vim.g.clipboard = {
+          name = "OSC 52",
+          copy = {
+            ["+"] = osc52.copy("+"),
+            ["*"] = osc52.copy("*"),
+          },
+          paste = {
+            ["+"] = osc52.paste("+"),
+            ["*"] = osc52.paste("*"),
+          },
+        }
+        return
+      end
+
+      vim.g.clipboard = false
     end,
   },
 }
