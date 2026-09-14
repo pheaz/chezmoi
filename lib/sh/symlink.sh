@@ -27,6 +27,14 @@ status_symlink() {
       return 0
     fi
 
+    legacy_source="$repo_dir/$component"
+    raw_target=$(readlink "$target" 2>/dev/null || true)
+    if [ "$raw_target" = "$legacy_source" ]; then
+      printf '! %s still points to legacy component path %s\n' "$target" "$legacy_source"
+      printf '  Run: %s %s apply\n' "$0" "$component"
+      return 0
+    fi
+
     if [ -z "$actual" ]; then
       printf '! %s is a broken symlink\n' "$target" >&2
     else
@@ -63,6 +71,16 @@ apply_symlink() {
       printf '%s is already linked to %s\n' "$target" "$source"
       return 0
     fi
+
+    legacy_source="$repo_dir/$component"
+    raw_target=$(readlink "$target" 2>/dev/null || true)
+    if [ "$raw_target" = "$legacy_source" ]; then
+      rm "$target"
+      ln -s "$source" "$target"
+      printf 'Migrated %s from %s to %s\n' "$target" "$legacy_source" "$source"
+      return 0
+    fi
+
     printf 'Refusing to replace existing symlink %s\n' "$target" >&2
     exit 1
   fi

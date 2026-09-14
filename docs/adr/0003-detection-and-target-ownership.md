@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-06
+- Revised: 2026-09-14
 
 ## Context
 
@@ -15,7 +16,7 @@ Dotfiles owns, per component:
 - the natural config target for each supported platform;
 - the installation mode used for that component.
 
-This metadata is stored in `configs/<component>.yaml`. The tracked source is implicit as `<repo>/<component>`.
+This metadata is stored in `components/<component>/manifest.yaml`. The tracked managed source is `components/<component>/files/`.
 
 A component may intentionally omit targets for platforms it does not support. Automatic setup skips that component on an unsupported platform. Explicit component commands report that the component has no target for the current platform.
 

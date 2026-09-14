@@ -20,6 +20,8 @@ function Show-Match([string]$Commit) {
 }
 
 function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Target) {
+    $componentPath = "components/$ComponentName"
+    $repoFilesPath = "$componentPath/files"
     $item = Get-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
     if ($item -and $item.LinkType) {
         Write-Host "! $Target is a symlink; copy-mode comparison expects a real directory"
@@ -44,12 +46,12 @@ function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Targe
     $localOnly = 0
     $repoDirty = 0
 
-    $repoFiles = @(& git -C $RepoDir -c core.quotePath=false ls-files -- $ComponentName)
+    $repoFiles = @(& git -C $RepoDir -c core.quotePath=false ls-files -- $repoFilesPath)
     $tracked = @{}
 
     foreach ($repoPath in $repoFiles) {
         if (-not $repoPath) { continue }
-        $rel = $repoPath.Substring($ComponentName.Length + 1)
+        $rel = $repoPath.Substring($repoFilesPath.Length + 1)
         $tracked[$rel] = $true
         $sourceFile = Join-Path $RepoDir ($repoPath -replace '/', [IO.Path]::DirectorySeparatorChar)
         $targetFile = Join-Path $Target ($rel -replace '/', [IO.Path]::DirectorySeparatorChar)
@@ -101,7 +103,8 @@ function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Targe
             continue
         }
 
-        $match = Get-HistoryMatch $repoPath $rel $targetBlob
+        $legacyPath = "$ComponentName/$rel"
+        $match = Get-HistoryMatch $repoPath $legacyPath $targetBlob
         if (-not $match) {
             Write-Host "? $rel"
             Write-Host '    natural-location content matches no committed version'
@@ -111,7 +114,7 @@ function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Targe
 
         & git -C $RepoDir merge-base --is-ancestor $match HEAD 2>$null
         if ($LASTEXITCODE -eq 0) {
-            $changes = (& git -C $RepoDir rev-list --count "$match..HEAD" -- $repoPath).Trim()
+            $changes = (& git -C $RepoDir rev-list --count "$match..HEAD" -- $repoPath $legacyPath).Trim()
             Write-Host "< $rel"
             Write-Host "    natural location is behind repo by $changes file-change commit(s)"
             Show-Match $match
@@ -121,7 +124,7 @@ function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Targe
 
         & git -C $RepoDir merge-base --is-ancestor HEAD $match 2>$null
         if ($LASTEXITCODE -eq 0) {
-            $changes = (& git -C $RepoDir rev-list --count "HEAD..$match" -- $repoPath).Trim()
+            $changes = (& git -C $RepoDir rev-list --count "HEAD..$match" -- $repoPath $legacyPath).Trim()
             Write-Host "> $rel"
             Write-Host "    repo HEAD is behind this known natural-location version by $changes file-change commit(s)"
             Show-Match $match
@@ -139,7 +142,7 @@ function Test-ConfigTree([string]$ComponentName, [string]$Source, [string]$Targe
     foreach ($file in $localFiles) {
         $rel = [IO.Path]::GetRelativePath($Target, $file.FullName).Replace('\', '/')
         if ($tracked.ContainsKey($rel)) { continue }
-        $repoPath = "$ComponentName/$rel"
+        $repoPath = "$repoFilesPath/$rel"
         & git -C $RepoDir check-ignore -q -- $repoPath 2>$null
         if ($LASTEXITCODE -eq 0) { continue }
         Write-Host "> $rel"
@@ -167,14 +170,15 @@ function Apply-ConfigTree([string]$ComponentName, [string]$Source, [string]$Targ
 }
 
 function Capture-ConfigTree([string]$ComponentName, [string]$Source, [string]$Target) {
+    $componentPath = "components/$ComponentName"
     $targetItem = Get-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
     if (-not $targetItem -or -not $targetItem.PSIsContainer -or $targetItem.LinkType) {
         throw "Cannot capture: expected a real directory at $Target"
     }
 
-    $repoChanges = @(& git -C $RepoDir status --porcelain -- $ComponentName)
+    $repoChanges = @(& git -C $RepoDir status --porcelain -- $componentPath)
     if ($repoChanges.Count -gt 0) {
-        throw "Refusing to capture over existing repo changes in $ComponentName/. Commit, discard, or move those changes first."
+        throw "Refusing to capture over existing repo changes in $componentPath/. Commit, discard, or move those changes first."
     }
 
     $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-" + [guid]::NewGuid().ToString('N'))
@@ -195,6 +199,6 @@ function Capture-ConfigTree([string]$ComponentName, [string]$Source, [string]$Ta
     }
 
     Write-Host "Captured $Target -> $Source`n"
-    & git -C $RepoDir status --short -- $ComponentName
-    & git -C $RepoDir diff -- $ComponentName
+    & git -C $RepoDir status --short -- $componentPath
+    & git -C $RepoDir diff -- $componentPath
 }

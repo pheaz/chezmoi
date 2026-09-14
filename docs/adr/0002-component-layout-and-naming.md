@@ -1,26 +1,33 @@
-# ADR-0002: Name components after actual applications
+# ADR-0002: Package components under `components/`
 
 - Status: Accepted
 - Date: 2026-09-06
+- Revised: 2026-09-14
 
 ## Context
 
-`machines` may use logical roles such as `terminal` that resolve to different applications on each platform. Dotfiles should describe the concrete application whose files are being configured.
+The original layout stored each application's raw configuration directly at the repository root and kept metadata separately under `configs/`. That worked while components contained only configuration files, but it does not provide a clean home for component-specific metadata or exceptional setup behavior.
+
+Component directories should remain understandable without `machines`, and scripts must never be mixed into the file tree exposed directly to an application.
 
 ## Decision
 
-Each dotfiles component is named after the actual application, not a logical role from another repository.
+All managed configuration is organized as self-contained components below `components/<component>/`.
 
-Examples:
+A component uses these names:
 
-- `iterm2/`
-- `windows-terminal/`
-- `nvim/`
+- `files/` — the static managed file tree. Only files intended to be consumed or installed for the application belong here; setup scripts never do.
+- `manifest.yaml` — component detection, installation mode, and platform-specific natural targets.
+- `setup.sh` and `setup.ps1` — optional component-owned integration scripts, used only by `setup` mode.
 
-Each component stores its real tracked config directly in `<component>/`. Metadata lives separately in `configs/<component>.yaml`; there is no extra `files/` wrapper directory.
+Components are named after the concrete configuration subject rather than a logical role from another repository. Examples include `nvim`, `karabiner`, and `gitconfig`.
+
+The `files/` wrapper is intentional: the component root now contains both managed files and component metadata/behavior, so the wrapper preserves an exact application-facing filesystem tree.
 
 ## Consequences
 
-- Dotfiles naming remains understandable without `machines`.
-- Different platform implementations of one logical role can have separate components.
-- Component directories remain directly usable as configuration trees.
+- Everything specific to one component is colocated below one directory.
+- `files/` remains safe to symlink or copy as a complete tree.
+- Component-specific scripts cannot leak into an application's natural config directory.
+- Metadata no longer requires a parallel `configs/` hierarchy.
+- Dotfiles naming remains independent of logical roles in `machines`.
