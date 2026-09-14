@@ -1,3 +1,9 @@
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor and temporary files
 *.swp
 *.swo
 *.bak
@@ -5,5 +11,6 @@
 *.log
 session.*
 
-nvim/plugin/packer_compiled.lua
-karabiner/automatic_backups/
+# Component-generated files
+components/nvim/files/plugin/packer_compiled.lua
+components/karabiner/files/automatic_backups/
