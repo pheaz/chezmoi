@@ -25,6 +25,8 @@ status_tree() {
   component=$1
   source=$2
   target=$3
+  component_path="components/$component"
+  repo_files_path="$component_path/files"
 
   if [ -L "$target" ]; then
     printf '! %s is a symlink; copy-mode comparison expects a real directory\n' "$target"
@@ -45,7 +47,7 @@ status_tree() {
   tmp_source=$(mktemp)
   tmp_target=$(mktemp)
 
-  git -C "$repo_dir" -c core.quotePath=false ls-files -- "$component" | LC_ALL=C sort > "$tmp_source"
+  git -C "$repo_dir" -c core.quotePath=false ls-files -- "$repo_files_path" | LC_ALL=C sort > "$tmp_source"
   find "$target" -type f -print | LC_ALL=C sort > "$tmp_target"
 
   same=0
@@ -57,7 +59,7 @@ status_tree() {
   repo_dirty=0
 
   while IFS= read -r repo_path; do
-    rel=${repo_path#"$component"/}
+    rel=${repo_path#"$repo_files_path"/}
     source_file="$repo_dir/$repo_path"
     target_file="$target/$rel"
 
@@ -109,7 +111,8 @@ status_tree() {
       continue
     fi
 
-    match=$(find_history_match "$repo_path" "$rel" "$target_blob" || true)
+    legacy_path="$component/$rel"
+    match=$(find_history_match "$repo_path" "$legacy_path" "$target_blob" || true)
 
     if [ -z "$match" ]; then
       printf '? %s\n' "$rel"
@@ -119,7 +122,7 @@ status_tree() {
     fi
 
     if git -C "$repo_dir" merge-base --is-ancestor "$match" HEAD >/dev/null 2>&1; then
-      changes=$(git -C "$repo_dir" rev-list --count "$match..HEAD" -- "$repo_path")
+      changes=$(git -C "$repo_dir" rev-list --count "$match..HEAD" -- "$repo_path" "$legacy_path")
       printf '< %s\n' "$rel"
       printf '    natural location is behind repo by %s file-change commit(s)\n' "$changes"
       print_match_details "$match"
@@ -128,7 +131,7 @@ status_tree() {
     fi
 
     if git -C "$repo_dir" merge-base --is-ancestor HEAD "$match" >/dev/null 2>&1; then
-      changes=$(git -C "$repo_dir" rev-list --count "HEAD..$match" -- "$repo_path")
+      changes=$(git -C "$repo_dir" rev-list --count "HEAD..$match" -- "$repo_path" "$legacy_path")
       printf '> %s\n' "$rel"
       printf '    repo HEAD is behind this known natural-location version by %s file-change commit(s)\n' "$changes"
       print_match_details "$match"
@@ -144,7 +147,7 @@ status_tree() {
 
   while IFS= read -r target_file; do
     rel=${target_file#"$target"/}
-    repo_path="$component/$rel"
+    repo_path="$repo_files_path/$rel"
     if git -C "$repo_dir" ls-files --error-unmatch -- "$repo_path" >/dev/null 2>&1; then
       continue
     fi
@@ -191,14 +194,15 @@ capture_tree() {
   component=$1
   source=$2
   target=$3
+  component_path="components/$component"
 
   if [ -L "$target" ] || [ ! -d "$target" ]; then
     printf 'Cannot capture: expected a real directory at %s\n' "$target" >&2
     exit 1
   fi
 
-  if [ -n "$(git -C "$repo_dir" status --porcelain -- "$component")" ]; then
-    printf 'Refusing to capture over existing repo changes in %s/\n' "$component" >&2
+  if [ -n "$(git -C "$repo_dir" status --porcelain -- "$component_path")" ]; then
+    printf 'Refusing to capture over existing repo changes in %s/\n' "$component_path" >&2
     printf 'Commit, discard, or move those changes first.\n' >&2
     exit 1
   fi
@@ -212,6 +216,6 @@ capture_tree() {
   cp -R "$tmp"/. "$source"/
 
   printf 'Captured %s -> %s\n\n' "$target" "$source"
-  git -C "$repo_dir" status --short -- "$component"
-  git -C "$repo_dir" diff -- "$component" || true
+  git -C "$repo_dir" status --short -- "$component_path"
+  git -C "$repo_dir" diff -- "$component_path" || true
 }

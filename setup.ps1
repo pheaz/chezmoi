@@ -126,12 +126,18 @@ if (-not $info.Target) {
     throw "Component $Component has no target for windows"
 }
 
-if (-not (Test-Path -LiteralPath $info.Source -PathType Container)) {
-    throw "Missing component files directory: $($info.Source)"
-}
-
 switch ($Action) {
-    'status'  { Invoke-Status $info }
-    'apply'   { Invoke-Apply $info }
+    'status' {
+        if (-not (Test-Path -LiteralPath $info.Source -PathType Container)) {
+            throw "Missing component files directory: $($info.Source)"
+        }
+        Invoke-Status $info
+    }
+    'apply' {
+        if (-not (Test-Path -LiteralPath $info.Source -PathType Container)) {
+            throw "Missing component files directory: $($info.Source)"
+        }
+        Invoke-Apply $info
+    }
     'capture' { Invoke-Capture $info }
 }

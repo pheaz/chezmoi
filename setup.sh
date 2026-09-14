@@ -124,11 +124,18 @@ action=${2:-status}
 [ "$#" -le 2 ] || usage
 load_component "$component"
 require_component_target
-require_component_source
 
 case "$action" in
-  status) status_component ;;
-  apply) apply_component ;;
-  capture) capture_component ;;
+  status)
+    require_component_source
+    status_component
+    ;;
+  apply)
+    require_component_source
+    apply_component
+    ;;
+  capture)
+    capture_component
+    ;;
   *) usage ;;
 esac
