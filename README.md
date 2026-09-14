@@ -62,6 +62,8 @@ There is only one copy of the managed files, so edits made through either path i
 
 If the natural target already exists as a real directory, setup refuses to replace it. `status` compares that directory with the repo first, and `capture` can import it into the component's `files/` tree before migration if needed.
 
+Symlinks created by the previous root-level component layout are recognized as a safe legacy case. `status` reports them and `apply` rewrites only those exact links to the new `components/<component>/files/` path; unrelated symlinks are still refused.
+
 ### `copy`
 
 Available for applications that should not or cannot use symlinks. The component files and natural application location are separate copies.

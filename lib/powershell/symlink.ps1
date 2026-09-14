@@ -22,6 +22,13 @@ function Test-SymlinkConfig([string]$ComponentName, [string]$Source, [string]$Ta
             return
         }
 
+        $legacy = [IO.Path]::GetFullPath((Join-Path $RepoDir $ComponentName)).TrimEnd([char[]]'\/')
+        if ($actual -and $actual.Equals($legacy, [StringComparison]::OrdinalIgnoreCase)) {
+            Write-Host "! $Target still points to legacy component path $legacy"
+            Write-Host "  Run: .\setup.ps1 $ComponentName apply"
+            return
+        }
+
         if (-not $actual) {
             throw "$Target is a broken or unreadable symlink"
         }
@@ -51,6 +58,14 @@ function Apply-SymlinkConfig([string]$ComponentName, [string]$Source, [string]$T
             if ($actual) { $actual = $actual.TrimEnd([char[]]'\/') }
             if ($actual -and $actual.Equals($expected, [StringComparison]::OrdinalIgnoreCase)) {
                 Write-Host "$Target is already linked to $Source"
+                return
+            }
+
+            $legacy = [IO.Path]::GetFullPath((Join-Path $RepoDir $ComponentName)).TrimEnd([char[]]'\/')
+            if ($actual -and $actual.Equals($legacy, [StringComparison]::OrdinalIgnoreCase)) {
+                Remove-Item -LiteralPath $Target -Force
+                New-Item -ItemType SymbolicLink -Path $Target -Target $Source | Out-Null
+                Write-Host "Migrated $Target from $legacy to $Source"
                 return
             }
         }
