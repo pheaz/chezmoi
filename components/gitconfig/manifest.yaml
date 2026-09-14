@@ -1,0 +1,9 @@
+detect:
+  command: git
+
+mode: setup
+
+target:
+  windows: "$HOME/.gitconfig"
+  macos: "$HOME/.gitconfig"
+  linux: "$HOME/.gitconfig"

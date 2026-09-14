@@ -18,12 +18,17 @@ expand_target() {
   esac
 }
 
+component_dir_for() {
+  printf '%s/%s\n' "$components_dir" "$1"
+}
+
 manifest_for() {
-  printf '%s/%s.yaml\n' "$configs_dir" "$1"
+  printf '%s/manifest.yaml\n' "$(component_dir_for "$1")"
 }
 
 load_component() {
   component=$1
+  component_dir=$(component_dir_for "$component")
   manifest=$(manifest_for "$component")
 
   [ -f "$manifest" ] || {
@@ -31,7 +36,8 @@ load_component() {
     exit 1
   }
 
-  source="$repo_dir/$component"
+  source="$component_dir/files"
+  setup_script="$component_dir/setup.sh"
   platform=$(current_platform)
   target_template=$(PLATFORM="$platform" yq -r '.target[strenv(PLATFORM)] // ""' "$manifest")
   target=''
@@ -43,7 +49,7 @@ load_component() {
   mode=$(yq -r '.mode // "copy"' "$manifest")
 
   case "$mode" in
-    symlink|copy) ;;
+    symlink|copy|setup) ;;
     *) printf 'Unsupported mode for %s: %s\n' "$component" "$mode" >&2; exit 1 ;;
   esac
 }
@@ -57,7 +63,14 @@ require_component_target() {
 
 require_component_source() {
   [ -d "$source" ] || {
-    printf 'Missing repo config directory: %s\n' "$source" >&2
+    printf 'Missing component files directory: %s\n' "$source" >&2
+    exit 1
+  }
+}
+
+require_component_setup_script() {
+  [ -f "$setup_script" ] || {
+    printf 'Missing setup script for %s: %s\n' "$component" "$setup_script" >&2
     exit 1
   }
 }

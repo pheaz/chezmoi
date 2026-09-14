@@ -15,18 +15,20 @@ function Resolve-TargetPath([string]$Value) {
 }
 
 function Get-ComponentInfo([string]$Name) {
-    $manifest = Join-Path $ConfigsDir "$Name.yaml"
+    $componentDir = Join-Path $ComponentsDir $Name
+    $manifest = Join-Path $componentDir 'manifest.yaml'
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
         throw "Unknown component: $Name"
     }
 
-    $source = Join-Path $RepoDir $Name
+    $source = Join-Path $componentDir 'files'
+    $setupScript = Join-Path $componentDir 'setup.ps1'
     $targetTemplate = (& $script:Yq -r '.target.windows // ""' $manifest).Trim()
     $target = if ($targetTemplate) { Resolve-TargetPath $targetTemplate } else { $null }
 
     $detectCommand = (& $script:Yq -r '.detect.command // ""' $manifest).Trim()
     $mode = (& $script:Yq -r '.mode // "copy"' $manifest).Trim()
-    if ($mode -notin @('symlink', 'copy')) {
+    if ($mode -notin @('symlink', 'copy', 'setup')) {
         throw "Unsupported mode for $Name`: $mode"
     }
 
@@ -36,5 +38,7 @@ function Get-ComponentInfo([string]$Name) {
         Target = $target
         DetectCommand = $detectCommand
         Mode = $mode
+        SetupScript = $setupScript
+        ComponentDir = $componentDir
     }
 }

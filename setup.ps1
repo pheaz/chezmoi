@@ -9,32 +9,45 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $RepoDir = $PSScriptRoot
-$ConfigsDir = Join-Path $RepoDir 'configs'
+$ComponentsDir = Join-Path $RepoDir 'components'
 
 . (Join-Path $RepoDir 'lib\powershell\prerequisites.ps1')
 . (Join-Path $RepoDir 'lib\powershell\manifests.ps1')
 . (Join-Path $RepoDir 'lib\powershell\copy.ps1')
 . (Join-Path $RepoDir 'lib\powershell\symlink.ps1')
 
-function Invoke-Status($Info) {
-    if ($Info.Mode -eq 'symlink') {
-        Test-SymlinkConfig $Info.Name $Info.Source $Info.Target
+function Invoke-ComponentSetup($Info, [string]$Action) {
+    if (-not (Test-Path -LiteralPath $Info.SetupScript -PathType Leaf)) {
+        throw "Missing setup script for $($Info.Name): $($Info.SetupScript)"
     }
-    else {
-        Test-ConfigTree $Info.Name $Info.Source $Info.Target
+
+    & $Info.SetupScript $Action $Info.Source $Info.Target
+    if ($LASTEXITCODE -ne 0) {
+        throw "Setup action '$Action' failed for $($Info.Name)"
+    }
+}
+
+function Invoke-Status($Info) {
+    switch ($Info.Mode) {
+        'symlink' { Test-SymlinkConfig $Info.Name $Info.Source $Info.Target }
+        'copy'    { Test-ConfigTree $Info.Name $Info.Source $Info.Target }
+        'setup'   { Invoke-ComponentSetup $Info 'status' }
     }
 }
 
 function Invoke-Apply($Info) {
-    if ($Info.Mode -eq 'symlink') {
-        Apply-SymlinkConfig $Info.Name $Info.Source $Info.Target
-    }
-    else {
-        Apply-ConfigTree $Info.Name $Info.Source $Info.Target
+    switch ($Info.Mode) {
+        'symlink' { Apply-SymlinkConfig $Info.Name $Info.Source $Info.Target }
+        'copy'    { Apply-ConfigTree $Info.Name $Info.Source $Info.Target }
+        'setup'   { Invoke-ComponentSetup $Info 'apply' }
     }
 }
 
 function Invoke-Capture($Info) {
+    if ($Info.Mode -eq 'setup') {
+        throw "capture is not supported for setup-mode component $($Info.Name)"
+    }
+
     $item = Get-Item -LiteralPath $Info.Target -Force -ErrorAction SilentlyContinue
     if ($Info.Mode -eq 'symlink' -and $item -and $item.LinkType) {
         Write-Host "$($Info.Target) is already a symlink into the repo; there is nothing to capture."
@@ -45,14 +58,15 @@ function Invoke-Capture($Info) {
 }
 
 function Invoke-AutoSetup {
-    $manifests = @(Get-ChildItem -LiteralPath $ConfigsDir -Filter '*.yaml' -File | Sort-Object Name)
-    if ($manifests.Count -eq 0) {
-        Write-Host "No config manifests found in $ConfigsDir"
-        return
-    }
+    $componentDirs = @(Get-ChildItem -LiteralPath $ComponentsDir -Directory | Sort-Object Name)
+    $found = $false
 
-    foreach ($manifest in $manifests) {
-        $name = [IO.Path]::GetFileNameWithoutExtension($manifest.Name)
+    foreach ($componentDir in $componentDirs) {
+        $manifest = Join-Path $componentDir.FullName 'manifest.yaml'
+        if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { continue }
+        $found = $true
+
+        $name = $componentDir.Name
         $info = Get-ComponentInfo $name
 
         if (-not $info.Target) {
@@ -67,17 +81,22 @@ function Invoke-AutoSetup {
 
         if (-not (Test-Path -LiteralPath $info.Source -PathType Container)) {
             $item = Get-Item -LiteralPath $info.Target -Force -ErrorAction SilentlyContinue
-            if ($item -and $item.PSIsContainer -and -not $item.LinkType) {
-                Write-Host "Skipping $name`: repo config has not been captured yet"
+            if ($info.Mode -ne 'setup' -and $item -and $item.PSIsContainer -and -not $item.LinkType) {
+                Write-Host "Skipping $name`: component files have not been captured yet"
                 Write-Host "  Run: .\setup.ps1 $name capture"
             }
             else {
-                Write-Host "Skipping $name`: missing repo config directory $($info.Source)"
+                Write-Host "Skipping $name`: missing component files directory $($info.Source)"
             }
             continue
         }
 
         Write-Host "`n== $name =="
+        if ($info.Mode -eq 'setup') {
+            Invoke-Apply $info
+            continue
+        }
+
         $item = Get-Item -LiteralPath $info.Target -Force -ErrorAction SilentlyContinue
         if ($item) {
             Invoke-Status $info
@@ -85,6 +104,10 @@ function Invoke-AutoSetup {
         else {
             Invoke-Apply $info
         }
+    }
+
+    if (-not $found) {
+        Write-Host "No component manifests found in $ComponentsDir"
     }
 }
 
@@ -103,8 +126,8 @@ if (-not $info.Target) {
     throw "Component $Component has no target for windows"
 }
 
-if ($Action -ne 'capture' -and -not (Test-Path -LiteralPath $info.Source -PathType Container)) {
-    throw "Missing repo config directory: $($info.Source)"
+if (-not (Test-Path -LiteralPath $info.Source -PathType Container)) {
+    throw "Missing component files directory: $($info.Source)"
 }
 
 switch ($Action) {

@@ -2,7 +2,7 @@
 set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-configs_dir="$repo_dir/configs"
+components_dir="$repo_dir/components"
 
 . "$repo_dir/lib/sh/prerequisites.sh"
 . "$repo_dir/lib/sh/manifests.sh"
@@ -12,14 +12,14 @@ configs_dir="$repo_dir/configs"
 usage() {
   cat >&2 <<EOF
 Usage:
-  $0                         Configure all detected applications
+  $0                         Configure all detected components
   $0 <component> [status]
   $0 <component> apply
   $0 <component> capture
 
 status    Inspect how the natural config relates to the repo.
-apply     Configure the application according to the component mode.
-capture   Import an existing real config directory into the repo working tree.
+apply     Configure the component according to its installation mode.
+capture   Import an existing real config directory into the repo files tree.
 EOF
   exit 2
 }
@@ -31,10 +31,17 @@ require_git_repo() {
   }
 }
 
+run_component_setup() {
+  action=$1
+  require_component_setup_script
+  sh "$setup_script" "$action" "$source" "$target"
+}
+
 status_component() {
   case "$mode" in
     symlink) status_symlink "$component" "$source" "$target" ;;
     copy) status_tree "$component" "$source" "$target" ;;
+    setup) run_component_setup status ;;
   esac
 }
 
@@ -42,10 +49,16 @@ apply_component() {
   case "$mode" in
     symlink) apply_symlink "$component" "$source" "$target" ;;
     copy) apply_tree "$component" "$source" "$target" ;;
+    setup) run_component_setup apply ;;
   esac
 }
 
 capture_component() {
+  if [ "$mode" = setup ]; then
+    printf 'capture is not supported for setup-mode component %s\n' "$component" >&2
+    return 1
+  fi
+
   if [ "$mode" = symlink ] && [ -L "$target" ]; then
     printf '%s is already a symlink into the repo; there is nothing to capture.\n' "$target"
     return 0
@@ -57,10 +70,11 @@ capture_component() {
 auto_setup() {
   found=0
 
-  for manifest in "$configs_dir"/*.yaml; do
-    [ -e "$manifest" ] || continue
+  for component_dir in "$components_dir"/*; do
+    [ -d "$component_dir" ] || continue
+    [ -f "$component_dir/manifest.yaml" ] || continue
     found=1
-    component=$(basename "$manifest" .yaml)
+    component=$(basename "$component_dir")
     load_component "$component"
 
     if [ -z "$target" ]; then
@@ -74,24 +88,26 @@ auto_setup() {
     fi
 
     if [ ! -d "$source" ]; then
-      if [ -d "$target" ] && [ ! -L "$target" ]; then
-        printf 'Skipping %s: repo config has not been captured yet\n' "$component"
+      if [ "$mode" != setup ] && [ -d "$target" ] && [ ! -L "$target" ]; then
+        printf 'Skipping %s: component files have not been captured yet\n' "$component"
         printf '  Run: %s %s capture\n' "$0" "$component"
       else
-        printf 'Skipping %s: missing repo config directory %s\n' "$component" "$source"
+        printf 'Skipping %s: missing component files directory %s\n' "$component" "$source"
       fi
       continue
     fi
 
     printf '\n== %s ==\n' "$component"
-    if [ -e "$target" ] || [ -L "$target" ]; then
+    if [ "$mode" = setup ]; then
+      apply_component
+    elif [ -e "$target" ] || [ -L "$target" ]; then
       status_component
     else
       apply_component
     fi
   done
 
-  [ "$found" -eq 1 ] || printf 'No config manifests found in %s\n' "$configs_dir" >&2
+  [ "$found" -eq 1 ] || printf 'No component manifests found in %s\n' "$components_dir" >&2
 }
 
 require_git_repo
@@ -108,18 +124,11 @@ action=${2:-status}
 [ "$#" -le 2 ] || usage
 load_component "$component"
 require_component_target
+require_component_source
 
 case "$action" in
-  status)
-    require_component_source
-    status_component
-    ;;
-  apply)
-    require_component_source
-    apply_component
-    ;;
-  capture)
-    capture_component
-    ;;
+  status) status_component ;;
+  apply) apply_component ;;
+  capture) capture_component ;;
   *) usage ;;
 esac
