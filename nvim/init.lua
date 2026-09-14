@@ -108,5 +108,10 @@ vim.keymap.set({"n","v"}, "S", '"sS', { noremap = true })
 -- Copy to system clipboard in Visual mode
 vim.keymap.set("v", "<C-c>", '"+y', { noremap = true })
 
--- replay last used macro with Q
-vim.api.nvim_set_keymap('n', 'Q', '@@', { noremap = true, silent = true })
+-- replay last recorded macro with Q
+vim.keymap.set("n", "Q", function()
+  local reg = vim.fn.reg_recorded()
+  if reg ~= "" then
+    vim.cmd("normal! " .. vim.v.count1 .. "@" .. reg)
+  end
+end, { desc = "Replay last recorded macro" })
