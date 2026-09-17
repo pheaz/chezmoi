@@ -12,3 +12,7 @@ global:
   ApplePressAndHoldEnabled:
     type: bool
     value: false
+
+  AppleScrollerPagingBehavior:
+    type: bool
+    value: true
