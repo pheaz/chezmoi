@@ -1,0 +1,7 @@
+detect:
+  command: defaults
+
+mode: setup
+
+target:
+  macos: "$HOME/Library/Preferences/.GlobalPreferences.plist"
