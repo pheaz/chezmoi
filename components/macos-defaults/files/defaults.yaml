@@ -28,3 +28,7 @@ global:
   KeyRepeat:
     type: int
     value: 2
+
+  NSAutomaticPeriodSubstitutionEnabled:
+    type: bool
+    value: false
