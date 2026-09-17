@@ -16,3 +16,11 @@ global:
   AppleScrollerPagingBehavior:
     type: bool
     value: true
+
+  InitialKeyRepeat:
+    type: int
+    value: 13
+
+  KeyRepeat:
+    type: int
+    value: 2
