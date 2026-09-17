@@ -17,6 +17,10 @@ global:
     type: bool
     value: true
 
+  AppleSpacesSwitchOnActivate:
+    type: bool
+    value: false
+
   InitialKeyRepeat:
     type: int
     value: 13
