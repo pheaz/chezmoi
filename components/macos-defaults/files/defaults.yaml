@@ -1,4 +1,14 @@
 global:
+  AppleLanguages:
+    type: array
+    value:
+      - en-US
+      - de-DE
+
+  AppleLocale:
+    type: string
+    value: "en_US@calendar=iso8601;rg=dezzzz"
+
   ApplePressAndHoldEnabled:
     type: bool
     value: false
