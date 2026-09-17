@@ -84,8 +84,8 @@ write_setting() {
     array)
       array_values=$(KEY="$write_key" yq -r '.global[strenv(KEY)].value[]' "$settings")
       old_ifs=$IFS
-      IFS='
-'
+      IFS=$(printf '\nX')
+      IFS=${IFS%X}
       set -f
       # Split only on newlines so array elements may contain spaces.
       # shellcheck disable=SC2086
