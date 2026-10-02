@@ -84,6 +84,8 @@ A setup-mode component owns `setup.sh` and/or `setup.ps1` at its component root.
 
 `gitconfig` uses this mode. Its tracked `files/.gitconfig` contains portable Git settings, while the machine-local `~/.gitconfig` remains free to contain OS-specific credential helpers. Setup registers the tracked file through Git's global `include.path` rather than replacing the machine-local file.
 
+`zsh` also uses this mode because the generic symlink mode links a whole directory. Its setup links the single file `~/.zshrc` to `components/zsh/files/.zshrc` on macOS/Linux. It refuses to replace existing files or unrelated symlinks. For a first migration, review the existing file and copy it into `files/.zshrc` if needed, then move the original to a backup before running `./setup.sh zsh apply`. Once linked, edits to `~/.zshrc` directly change the tracked file; `capture` is unnecessary. The current config includes the macOS Homebrew path `/opt/homebrew/bin/brew`; adapt that line before using it on Linux or another Homebrew prefix.
+
 ## Automatic setup
 
 Run setup with no component to inspect every component manifest, detect installed applications, and configure them according to their mode:
@@ -108,6 +110,8 @@ The setup scripts use `yq` to read YAML manifests. If `yq` is already available,
 ./setup.sh nvim capture
 ./setup.sh gitconfig status
 ./setup.sh gitconfig apply
+./setup.sh zsh status
+./setup.sh zsh apply
 ```
 
 Once a symlink-mode component is correctly linked, `capture` is unnecessary because the application is already editing the tracked files directly.
