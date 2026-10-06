@@ -1,0 +1,24 @@
+{{ if eq .chezmoi.os "windows" -}}
+$ErrorActionPreference = 'Stop'
+$config = '{{ joinPath .chezmoi.homeDir ".gitconfig" | replace "'" "''" }}'
+$portable = '{{ joinPath .chezmoi.homeDir ".config" "git" "portable.inc" | replace "'" "''" }}'
+$include = '.config/git/portable.inc'
+if (-not (Test-Path -LiteralPath $portable -PathType Leaf)) {
+    throw "Missing portable Git config: $portable"
+}
+$item = Get-Item -LiteralPath $config -Force -ErrorAction SilentlyContinue
+if ($item -and ($item.PSIsContainer -or $item.LinkType)) {
+    throw "Unsafe machine-local Git config: $config"
+}
+$values = @(& git config --file $config --no-includes --get-all include.path)
+if ($LASTEXITCODE -notin 0, 1) { throw 'Cannot read Git include.path.' }
+$count = @($values | Where-Object { $_ -ceq $include }).Count
+if ($count -ne 1) {
+    if ($count -gt 0) {
+        & git config --file $config --fixed-value --unset-all include.path $include
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot deduplicate Git include.path.' }
+    }
+    & git config --file $config --add include.path $include
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot add portable Git include.' }
+}
+{{ end -}}

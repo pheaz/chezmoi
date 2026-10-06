@@ -1,0 +1,32 @@
+{{ if or (eq .chezmoi.os "darwin") (eq .chezmoi.os "linux") -}}
+#!/bin/sh
+main() {
+    source={{ joinPath .chezmoi.sourceDir "dot_config" "nvim" | shellQuote }}
+    default_config={{ joinPath .chezmoi.homeDir ".config" | shellQuote }}
+    config={{ env "XDG_CONFIG_HOME" | default (joinPath .chezmoi.homeDir ".config") | clean | shellQuote }}
+    [ "$config" != "$default_config" ] || return 0
+    case "$config" in
+        /*) ;;
+        *) printf '%s\n' 'XDG_CONFIG_HOME must be absolute.' >&2; return 1 ;;
+    esac
+    target=$config/nvim
+    if [ -L "$target" ] && [ "$target" -ef "$source" ]; then return 0; fi
+    if [ -L "$target" ]; then
+        old_source=$(git -C {{ .chezmoi.sourceDir | shellQuote }} config --local --get chezmoiMigration.oldSourceDir 2>/dev/null)
+        link=$(readlink "$target") || return 1
+        if [ -n "$old_source" ] && {
+            [ "$link" = "$old_source/dot_config/nvim" ] ||
+            [ "$link" = "$old_source/components/nvim/files" ]
+        }; then
+            rm "$target" || return 1
+        fi
+    fi
+    if [ -e "$target" ] || [ -L "$target" ]; then
+        printf 'Refusing to replace unrelated Neovim target: %s\n' "$target" >&2
+        return 1
+    fi
+    mkdir -p "$config" || return 1
+    ln -s "$source" "$target" || return 1
+}
+main
+{{ end -}}

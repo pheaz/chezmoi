@@ -1,8 +1,0 @@
-detect:
-  command: zsh
-
-mode: setup
-
-target:
-  macos: "$HOME/.zshrc"
-  linux: "$HOME/.zshrc"

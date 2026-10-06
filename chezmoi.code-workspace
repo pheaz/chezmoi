@@ -1,7 +1,7 @@
 {
   "folders": [
     {
-      "name": "dotfiles",
+      "name": "chezmoi",
       "path": "."
     }
   ],

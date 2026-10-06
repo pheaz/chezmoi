@@ -1,0 +1,26 @@
+{{ if or (eq .chezmoi.os "darwin") (eq .chezmoi.os "linux") -}}
+#!/bin/sh
+main() {
+    config={{ joinPath .chezmoi.homeDir ".gitconfig" | shellQuote }}
+    portable={{ joinPath .chezmoi.homeDir ".config" "git" "portable.inc" | shellQuote }}
+    include='.config/git/portable.inc'
+    [ -f "$portable" ] || {
+        printf 'Missing portable Git config: %s\n' "$portable" >&2
+        return 1
+    }
+    if [ -L "$config" ] || { [ -e "$config" ] && [ ! -f "$config" ]; }; then
+        printf 'Refusing unsafe machine-local Git config: %s\n' "$config" >&2
+        return 1
+    fi
+    values=$(git config --file "$config" --no-includes --get-all include.path)
+    code=$?
+    [ "$code" -eq 0 ] || [ "$code" -eq 1 ] || return "$code"
+    count=$(printf '%s\n' "$values" | awk '$0 == ".config/git/portable.inc" { n++ } END { print n+0 }') || return 1
+    [ "$count" -eq 1 ] && return 0
+    if [ "$count" -gt 0 ]; then
+        git config --file "$config" --fixed-value --unset-all include.path "$include" || return 1
+    fi
+    git config --file "$config" --add include.path "$include" || return 1
+}
+main
+{{ end -}}

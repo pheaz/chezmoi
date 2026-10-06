@@ -12,5 +12,5 @@ Desktop.ini
 session.*
 
 # Component-generated files
-components/nvim/files/plugin/packer_compiled.lua
-components/karabiner/files/automatic_backups/
+dot_config/nvim/plugin/packer_compiled.lua
+dot_config/karabiner/automatic_backups/
