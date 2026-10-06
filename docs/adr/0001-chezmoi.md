@@ -18,3 +18,6 @@ Fixed macOS preferences use a native run_onchange script without yq.
 
 Repository documentation, automation, and the editor workspace are ignored by
 chezmoi. The former setup scripts, manifests, and orchestration libraries are removed.
+
+The Neovim and Karabiner directory layout described above is superseded by
+ADR 0002. These applications now use explicit directory symlinks.

@@ -1,16 +1,40 @@
 {{ if eq .chezmoi.os "windows" -}}
 $ErrorActionPreference = 'Stop'
-$source = '{{ joinPath .chezmoi.sourceDir "dot_config" "nvim" | replace "'" "''" }}'
+$repo = '{{ .chezmoi.sourceDir | replace "'" "''" }}'
+$source = Join-Path $repo 'configs/nvim'
 if (-not $env:LOCALAPPDATA -or -not [IO.Path]::IsPathRooted($env:LOCALAPPDATA)) {
     throw 'LOCALAPPDATA must be an absolute directory.'
 }
 $target = Join-Path $env:LOCALAPPDATA 'nvim'
 $item = Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
 if ($item) {
-    if ($item.LinkType -eq 'SymbolicLink' -and
-        [IO.Path]::GetFullPath([string]$item.Target).TrimEnd('\') -ieq
-        [IO.Path]::GetFullPath($source).TrimEnd('\')) { return }
-    throw "Refusing to replace unrelated Neovim target: $target"
+    if ($item.LinkType -ne 'SymbolicLink') {
+        throw "Refusing unrelated Neovim target: $target"
+    }
+    $link = [string](@($item.Target)[0])
+    if (-not [IO.Path]::IsPathRooted($link)) {
+        $link = Join-Path $env:LOCALAPPDATA $link
+    }
+    $link = [IO.Path]::GetFullPath($link).TrimEnd([char[]]'\/')
+    if ($link -ieq [IO.Path]::GetFullPath($source).TrimEnd([char[]]'\/')) {
+        return
+    }
+    $owned = @((Join-Path $repo 'dot_config/nvim'))
+    $old = & git -C $repo config --local --get chezmoiMigration.oldSourceDir
+    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1) {
+        throw 'Cannot read the previous source path.'
+    }
+    if ($old) {
+        $owned += (Join-Path $old 'dot_config/nvim')
+        $owned += (Join-Path $old 'components/nvim/files')
+    }
+    $matching = @($owned | Where-Object {
+        [IO.Path]::GetFullPath($_).TrimEnd([char[]]'\/') -ieq $link
+    })
+    if (-not $matching.Count) {
+        throw "Refusing unrelated Neovim symlink: $target"
+    }
+    Remove-Item -LiteralPath $target -Force
 }
 New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
 New-Item -ItemType SymbolicLink -Path $target -Target $source | Out-Null

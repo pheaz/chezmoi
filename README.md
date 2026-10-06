@@ -1,23 +1,20 @@
 # chezmoi
 
-Private, cross-platform configuration managed by [chezmoi](https://www.chezmoi.io/).
-The repository root is the source-state root; the normal checkout lives at
-`~/.local/share/chezmoi`. No `.chezmoiroot` is needed.
+Private configuration managed by chezmoi. The repository root is the source-state
+root, the normal checkout is ~/.local/share/chezmoi, and no .chezmoiroot is needed.
+The local configuration template sets mode = "symlink".
 
 ## Installation and daily use
 
-Install chezmoi and Git and authenticate for this private GitHub repository, then:
+Install Git and chezmoi, authenticate for this private repository, then run:
 
 ```sh
 chezmoi init --apply pheaz/chezmoi
 ```
 
-Use `chezmoi init --apply --ssh pheaz/chezmoi` to clone with SSH instead of HTTPS.
-Fetch and apply upstream changes with `chezmoi update`. Use `chezmoi diff` or
-`chezmoi apply --dry-run --verbose` to inspect changes, and `chezmoi apply` to apply them.
-Run `chezmoi init` after changing the configuration template.
-
-Normal Git workflow:
+Use chezmoi update to fetch and apply changes, chezmoi diff to review them,
+and chezmoi apply to apply local source changes. chezmoi cd opens a shell in
+this checkout. The normal Git workflow is:
 
 ```sh
 chezmoi cd
@@ -26,59 +23,54 @@ git commit -m "..."
 git push
 ```
 
-`chezmoi cd` opens a shell in the source directory. Close that nested shell when done.
+Use a feature branch and pull request for changes to protected main.
 
 ## Source-state layout
 
-- `dot_config/nvim/`: the single tracked Neovim configuration tree.
-- `dot_config/karabiner/`: macOS-only Karabiner configuration.
-- `dot_config/git/portable.inc`: portable Git settings.
-- `dot_zshrc`: macOS/Linux `~/.zshrc`.
-- `AppData/Local/symlink_nvim.tmpl`: the usual Windows Neovim directory symlink.
-- `run_after_10-nvim-*`: idempotent native scripts for redirected configuration paths.
-- `run_after_20-git-include.*`: idempotent native Git include registration.
-- `run_onchange_after_30-macos-defaults.sh.tmpl`: fixed global macOS preferences.
-- `.chezmoi.toml.tmpl`: generated local configuration with `mode = "symlink"`.
-- `.chezmoiignore`: platform exclusions and repository-only files.
-- `docs/`, `.github/`, `README.md`, and `chezmoi.code-workspace`: repository metadata.
+- configs/nvim/: the single tracked raw Neovim tree for all platforms.
+- configs/karabiner/: the tracked raw Karabiner tree.
+- dot_config/symlink_nvim.tmpl: the default POSIX Neovim directory link.
+- dot_config/symlink_karabiner.tmpl: the macOS Karabiner directory link.
+- AppData/Local/symlink_nvim.tmpl: the standard Windows Neovim directory link.
+- dot_config/git/portable.inc: portable Git settings.
+- dot_zshrc: the macOS/Linux ~/.zshrc.
+- run_after_10-nvim-*: redirected XDG/Windows path support.
+- run_after_20-git-include.*: idempotent portable Git include registration.
+- run_onchange_after_30-macos-defaults.sh.tmpl: fixed macOS preferences, without yq.
+- .chezmoi.toml.tmpl and .chezmoiignore: local configuration and target exclusions.
+- README.md, docs/, .github/, .githooks/, and chezmoi.code-workspace: repository metadata.
 
-Symlink mode links eligible regular files to the checkout. It does not turn every
-directory into a symlink, and templates, private files, and executable files have
-chezmoi's normal exceptions. Edit managed source files and commit their changes.
-The workspace uses a relative root and works regardless of checkout location.
+configs/ is ignored by chezmoi. Explicit symlink templates expose each application
+as one directory link; its children remain ordinary files in the tracked tree.
+Ordinary symlink mode still links eligible other files, including ~/.zshrc.
 
-## Platform paths
+## Platform paths and local files
 
-Neovim uses `$XDG_CONFIG_HOME/nvim`, falling back to `~/.config/nvim`, on macOS and
-Linux. At the default location, chezmoi manages its files directly. A nondefault
-absolute XDG location uses a directory symlink to the same tracked tree, maintained
-by a native script; this also supports a location outside HOME.
+Neovim uses $XDG_CONFIG_HOME/nvim on macOS/Linux, falling back to ~/.config/nvim.
+Windows uses $LOCALAPPDATA/nvim. Redirected absolute paths use native after scripts
+pointing at the same configs/nvim tree. Enable Windows Developer Mode or provide
+symlink creation permission. Existing unrelated destinations are refused.
 
-Windows uses `$LOCALAPPDATA/nvim`, with a native symlink template for the standard
-`~/AppData/Local` location and a native PowerShell script for a redirected location.
-The POSIX Neovim target is ignored on Windows. Enable Windows Developer Mode or
-grant symbolic-link creation permission. Git must be on PATH on every platform.
-Existing unrelated Neovim directories are refused and require review and backup.
+Karabiner uses ~/.config/karabiner on macOS only. Link the directory, not just
+karabiner.json, so Karabiner can detect configuration changes. Restart Karabiner
+after first changing the directory link. zsh is ignored on Windows.
 
-Karabiner always uses `~/.config/karabiner` on macOS. zsh is ignored on Windows.
-Git's portable include always lives at `~/.config/git/portable.inc`; its name avoids
-Git's automatic loading of an XDG `git/config` file.
+Portable Git settings are included once from ~/.config/git/portable.inc by the
+machine-local ~/.gitconfig. Credential helpers and other local settings remain
+there; do not add the entire machine-local file to chezmoi.
 
-The include hook adds `.config/git/portable.inc` once to the machine-local
-`~/.gitconfig`. Credential helpers, includeIf sections, and other local settings
-remain there. Local overrides for portable settings can be placed after the include.
-Do not add your entire machine-local Git configuration to chezmoi.
-
-The macOS preferences script uses `defaults` directly and reruns when its contents
-change. Log out or restart affected applications if needed for preference changes.
-Karabiner automatic backups and generated Neovim cache files are not managed.
+Edits through either application directory change its source files directly.
+New files appear in git status unless ignored. Karabiner backups and generated
+Neovim cache files are ignored. The migration preserves other local-only extras
+and excludes those specific untracked files through .git/info/exclude; use git add -f on
+specific intended files to start tracking them. Never force-add the whole tree.
 
 ## Migration history
 
-The old component framework is replaced by native chezmoi source names, ignores,
-templates, and run scripts. The `pre-chezmoi-migration` tag preserves the previous
-implementation. The current decision is documented in `docs/adr/0001-chezmoi.md`.
-Legacy tracked Karabiner backups, if present, are retained under `docs/legacy-karabiner/`.
+The pre-chezmoi-migration tag preserves the former component framework.
+The pre-directory-symlinks tag preserves the earlier per-file application layout.
+ADRs in docs/adr/ record both decisions. Local directory migration backups live
+under .git/chezmoi-directory-link-backup.*. An unrelated ~/karabiner is left alone.
 
 ## Repository-managed Git hooks
 
