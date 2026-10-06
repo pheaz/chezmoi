@@ -38,3 +38,7 @@ AppData/**
 .githooks
 
 .githooks/**
+
+# Raw configuration payloads are directory-symlink sources, not HOME targets.
+configs
+configs/**

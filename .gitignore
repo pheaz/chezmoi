@@ -14,3 +14,7 @@ session.*
 # Component-generated files
 dot_config/nvim/plugin/packer_compiled.lua
 dot_config/karabiner/automatic_backups/
+
+# Generated files inside directory-symlink payloads.
+configs/nvim/plugin/packer_compiled.lua
+configs/karabiner/automatic_backups/
