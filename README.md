@@ -79,3 +79,20 @@ The old component framework is replaced by native chezmoi source names, ignores,
 templates, and run scripts. The `pre-chezmoi-migration` tag preserves the previous
 implementation. The current decision is documented in `docs/adr/0001-chezmoi.md`.
 Legacy tracked Karabiner backups, if present, are retained under `docs/legacy-karabiner/`.
+
+## Repository-managed Git hooks
+
+On macOS/Linux, `.githooks/post-merge` and `.githooks/post-rewrite` automatically
+run `chezmoi apply` after successful merges and rebases. An already up-to-date
+pull does not trigger them. Calls from `chezmoi update` skip duplicate application;
+manual Git commands inside `chezmoi cd` remain supported.
+
+`run_onchange_after_40-git-hooks.sh.tmpl` installs these tracked hooks into
+`.git/hooks` during `chezmoi init --apply` and reruns when their contents change.
+Unrelated existing hooks and custom `core.hooksPath` settings require integration.
+Replaced versions of these hooks are preserved under `.git/chezmoi-hook-backup.*`.
+The hook installer is inactive on Windows. Hook installation does not alter the
+existing Windows configuration targets.
+
+`main` requires a pull request. Commit and push changes on a feature branch,
+merge the PR, then use `chezmoi update` on main.

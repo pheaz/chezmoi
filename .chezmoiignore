@@ -34,3 +34,7 @@ AppData
 AppData/**
 {{ end }}
 {{ end }}
+
+.githooks
+
+.githooks/**

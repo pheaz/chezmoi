@@ -1,0 +1,67 @@
+{{ if or (eq .chezmoi.os "darwin") (eq .chezmoi.os "linux") -}}
+#!/bin/sh
+# pheaz-chezmoi-hook-installer-v1
+# post-merge: {{ include ".githooks/post-merge" | sha256sum }}
+# post-rewrite: {{ include ".githooks/post-rewrite" | sha256sum }}
+main() {
+    repo=${CHEZMOI_SOURCE_DIR-}
+    [ -n "$repo" ] || return 1
+
+    configured=$(git -C "$repo" config --get core.hooksPath)
+    result=$?
+    if [ "$result" -eq 0 ]; then
+        printf 'Existing core.hooksPath requires integration: %s\n' "$configured" >&2
+        return 1
+    fi
+    [ "$result" -eq 1 ] || return "$result"
+
+    git_dir=$(git -C "$repo" rev-parse --absolute-git-dir) || return 1
+    hooks=$git_dir/hooks
+    [ ! -L "$hooks" ] || return 1
+    mkdir -p "$hooks" || return 1
+
+    # Validate both destinations before changing either hook.
+    for name in post-merge post-rewrite; do
+        source=$repo/.githooks/$name
+        target=$hooks/$name
+        [ -f "$source" ] && [ ! -L "$source" ] || return 1
+
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            [ -f "$target" ] && [ ! -L "$target" ] || return 1
+            if ! cmp -s "$source" "$target"; then
+                marker=$(sed -n '2p' "$target") || return 1
+                [ "$marker" = '# pheaz-chezmoi-apply-hook-v1' ] || {
+                    printf 'Refusing unrelated Git hook: %s\n' "$target" >&2
+                    return 1
+                }
+            fi
+        fi
+    done
+
+    for name in post-merge post-rewrite; do
+        source=$repo/.githooks/$name
+        target=$hooks/$name
+
+        if [ -f "$target" ] && cmp -s "$source" "$target"; then
+            chmod u+x "$target" || return 1
+            continue
+        fi
+
+        if [ -f "$target" ]; then
+            backup=$(mktemp -d "$git_dir/chezmoi-hook-backup.XXXXXXXX") || return 1
+            cp -p "$target" "$backup/$name" || return 1
+        fi
+
+        temporary=$(mktemp "$hooks/.chezmoi-apply.XXXXXXXX") || return 1
+        if cp -p "$source" "$temporary" &&
+           chmod 755 "$temporary" &&
+           mv -f "$temporary" "$target"; then
+            :
+        else
+            rm -f "$temporary"
+            return 1
+        fi
+    done
+}
+main
+{{ end -}}
