@@ -1,0 +1,35 @@
+#!/bin/sh
+# pheaz-chezmoi-apply-hook-v1
+main() {
+    case "${0##*/}" in
+        post-merge) ;;
+        post-rewrite) [ "${1-}" = rebase ] || return 0 ;;
+        *) return 0 ;;
+    esac
+
+    # chezmoi update applies changes itself; allow manual Git in chezmoi cd.
+    if [ "${CHEZMOI-}" = 1 ]; then
+        [ "${CHEZMOI_COMMAND-}" = cd ] || return 0
+    fi
+
+    PATH="${PATH:-/usr/bin:/bin}:/opt/homebrew/bin:/usr/local/bin"
+    export PATH
+
+    repo=$(git rev-parse --show-toplevel) || return 1
+    [ "$repo" = "$HOME/.local/share/chezmoi" ] || return 0
+
+    # Clear repository-specific variables exported by Git to hooks.
+    git_env=$(git rev-parse --local-env-vars) || return 1
+    for variable in $git_env; do
+        unset "$variable" || return 1
+    done
+
+    command chezmoi apply </dev/null
+    result=$?
+    if [ "$result" -ne 0 ]; then
+        printf '%s\n' \
+            'ERROR: Git completed, but chezmoi apply failed. Resolve the error, then run chezmoi apply.' >&2
+    fi
+    return "$result"
+}
+main "$@"
