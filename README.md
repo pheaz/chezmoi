@@ -1,121 +1,81 @@
-# Dotfiles
+# chezmoi
 
-Personal configuration files shared across machines.
+Private, cross-platform configuration managed by [chezmoi](https://www.chezmoi.io/).
+The repository root is the source-state root; the normal checkout lives at
+`~/.local/share/chezmoi`. No `.chezmoiroot` is needed.
 
-The setup scripts are standalone and derive component sources from the repository location. `~/.dotfiles` is the canonical checkout used by `machines`, but the repo can be cloned elsewhere intentionally.
+## Installation and daily use
 
-## Architecture decisions
-
-Accepted architectural decisions live in [`docs/adr/`](docs/adr/). New architectural changes should be recorded there before implementation changes are made.
-
-A core boundary is that `dotfiles` never depends on `machines`. Any prerequisite needed by dotfiles must be satisfied by dotfiles itself or be an explicit standalone prerequisite; `machines` is never part of the contract.
-
-## Layout
-
-- `components/<component>/files/` — the tracked files managed for that component; setup scripts never live here.
-- `components/<component>/manifest.yaml` — detection, installation mode, and natural target location.
-- `components/<component>/setup.sh` / `setup.ps1` — optional component-owned setup behavior for `setup` mode.
-- `lib/sh/` — internal macOS/Linux implementation modules shared across components.
-- `lib/powershell/` — internal Windows implementation modules shared across components.
-- `dotfiles.code-workspace` — tracked VS Code workspace using only relative paths.
-- `setup.sh` — public macOS/Linux CLI and orchestration entrypoint.
-- `setup.ps1` — public Windows CLI and orchestration entrypoint.
-
-The root setup scripts own the command-line flow and dispatch. Substantial reusable platform-specific behavior is split by responsibility into modules under `lib/`. Component-specific setup behavior stays with the component instead of being generalized prematurely.
-
-## Components
-
-Each component is self-contained below `components/`. Its manifest describes how the application is detected, where its natural configuration lives on each platform, and how its managed files are installed.
-
-```yaml
-# components/nvim/manifest.yaml
-detect:
-  command: nvim
-
-mode: symlink
-
-target:
-  windows: "$LOCALAPPDATA/nvim"
-  macos: "$XDG_CONFIG_HOME/nvim"
-  linux: "$XDG_CONFIG_HOME/nvim"
-```
-
-On macOS/Linux, `$XDG_CONFIG_HOME` falls back to `~/.config` when unset.
-
-The source is implicit: `components/nvim/manifest.yaml` configures `components/nvim/files/`. No checkout path is stored in the manifest.
-
-A component may omit targets for platforms it does not support. Automatic setup skips those components on unsupported platforms; explicit component commands report that no target exists for the current platform.
-
-## Modes
-
-### `symlink`
-
-Preferred when the application works normally with symlinked configuration.
-
-For Neovim, a checkout at `~/.dotfiles` produces:
-
-```text
-~/.config/nvim -> ~/.dotfiles/components/nvim/files
-```
-
-There is only one copy of the managed files, so edits made through either path immediately modify the Git working tree.
-
-If the natural target already exists as a real directory, setup refuses to replace it. `status` compares that directory with the repo first, and `capture` can import it into the component's `files/` tree before migration if needed.
-
-Symlinks created by the previous root-level component layout are recognized as a safe legacy case. `status` reports them and `apply` rewrites only those exact links to the new `components/<component>/files/` path; unrelated symlinks are still refused.
-
-### `copy`
-
-Available for applications that should not or cannot use symlinks. The component files and natural application location are separate copies.
-
-For copy-mode components:
-
-- `status` compares the two copies and uses Git history when possible to identify known older/newer versions.
-- `apply` copies the component files to a missing natural location.
-- `capture` copies a real natural config directory back into the component's `files/` tree.
-
-`capture` refuses to overwrite existing uncommitted changes for that component. Git remains the source of history and rollback.
-
-### `setup`
-
-Used when an application has installation semantics that cannot be represented correctly as a filesystem symlink or copy.
-
-A setup-mode component owns `setup.sh` and/or `setup.ps1` at its component root. The root setup entrypoints dispatch `status` and `apply` to those scripts. Automatic setup invokes `apply`, so setup scripts must be idempotent. `capture` is not supported for setup-mode components.
-
-`gitconfig` uses this mode. Its tracked `files/.gitconfig` contains portable Git settings, while the machine-local `~/.gitconfig` remains free to contain OS-specific credential helpers. Setup registers the tracked file through Git's global `include.path` rather than replacing the machine-local file.
-
-`zsh` also uses this mode because the generic symlink mode links a whole directory. Its setup links the single file `~/.zshrc` to `components/zsh/files/.zshrc` on macOS/Linux. It refuses to replace existing files or unrelated symlinks. For a first migration, review the existing file and copy it into `files/.zshrc` if needed, then move the original to a backup before running `./setup.sh zsh apply`. Once linked, edits to `~/.zshrc` directly change the tracked file; `capture` is unnecessary. The current config includes the macOS Homebrew path `/opt/homebrew/bin/brew`; adapt that line before using it on Linux or another Homebrew prefix.
-
-## Automatic setup
-
-Run setup with no component to inspect every component manifest, detect installed applications, and configure them according to their mode:
+Install chezmoi and Git and authenticate for this private GitHub repository, then:
 
 ```sh
-./setup.sh
+chezmoi init --apply pheaz/chezmoi
 ```
 
-```powershell
-.\setup.ps1
-```
+Use `chezmoi init --apply --ssh pheaz/chezmoi` to clone with SSH instead of HTTPS.
+Fetch and apply upstream changes with `chezmoi update`. Use `chezmoi diff` or
+`chezmoi apply --dry-run --verbose` to inspect changes, and `chezmoi apply` to apply them.
+Run `chezmoi init` after changing the configuration template.
 
-A missing symlink-mode target is linked into the component's `files/` tree. A missing copy-mode target is copied from it. Existing targets are inspected rather than overwritten. Setup-mode components run their idempotent `apply` action. Components without a target for the current platform are skipped.
-
-The setup scripts use `yq` to read YAML manifests. If `yq` is already available, they use it. Otherwise they bootstrap the official precompiled binary into the user-local `.local/bin` directory, so a standalone dotfiles clone does not depend on `machines` or a system package manager for this prerequisite.
-
-## Component commands
+Normal Git workflow:
 
 ```sh
-./setup.sh nvim status
-./setup.sh nvim apply
-./setup.sh nvim capture
-./setup.sh gitconfig status
-./setup.sh gitconfig apply
-./setup.sh zsh status
-./setup.sh zsh apply
+chezmoi cd
+git add .
+git commit -m "..."
+git push
 ```
 
-Once a symlink-mode component is correctly linked, `capture` is unnecessary because the application is already editing the tracked files directly.
+`chezmoi cd` opens a shell in the source directory. Close that nested shell when done.
 
-## VS Code workspace
+## Source-state layout
 
-`dotfiles.code-workspace` is tracked directly and contains only the repository root as a relative folder. No machine-specific generation step is required.
+- `dot_config/nvim/`: the single tracked Neovim configuration tree.
+- `dot_config/karabiner/`: macOS-only Karabiner configuration.
+- `dot_config/git/portable.inc`: portable Git settings.
+- `dot_zshrc`: macOS/Linux `~/.zshrc`.
+- `AppData/Local/symlink_nvim.tmpl`: the usual Windows Neovim directory symlink.
+- `run_after_10-nvim-*`: idempotent native scripts for redirected configuration paths.
+- `run_after_20-git-include.*`: idempotent native Git include registration.
+- `run_onchange_after_30-macos-defaults.sh.tmpl`: fixed global macOS preferences.
+- `.chezmoi.toml.tmpl`: generated local configuration with `mode = "symlink"`.
+- `.chezmoiignore`: platform exclusions and repository-only files.
+- `docs/`, `.github/`, `README.md`, and `chezmoi.code-workspace`: repository metadata.
+
+Symlink mode links eligible regular files to the checkout. It does not turn every
+directory into a symlink, and templates, private files, and executable files have
+chezmoi's normal exceptions. Edit managed source files and commit their changes.
+The workspace uses a relative root and works regardless of checkout location.
+
+## Platform paths
+
+Neovim uses `$XDG_CONFIG_HOME/nvim`, falling back to `~/.config/nvim`, on macOS and
+Linux. At the default location, chezmoi manages its files directly. A nondefault
+absolute XDG location uses a directory symlink to the same tracked tree, maintained
+by a native script; this also supports a location outside HOME.
+
+Windows uses `$LOCALAPPDATA/nvim`, with a native symlink template for the standard
+`~/AppData/Local` location and a native PowerShell script for a redirected location.
+The POSIX Neovim target is ignored on Windows. Enable Windows Developer Mode or
+grant symbolic-link creation permission. Git must be on PATH on every platform.
+Existing unrelated Neovim directories are refused and require review and backup.
+
+Karabiner always uses `~/.config/karabiner` on macOS. zsh is ignored on Windows.
+Git's portable include always lives at `~/.config/git/portable.inc`; its name avoids
+Git's automatic loading of an XDG `git/config` file.
+
+The include hook adds `.config/git/portable.inc` once to the machine-local
+`~/.gitconfig`. Credential helpers, includeIf sections, and other local settings
+remain there. Local overrides for portable settings can be placed after the include.
+Do not add your entire machine-local Git configuration to chezmoi.
+
+The macOS preferences script uses `defaults` directly and reruns when its contents
+change. Log out or restart affected applications if needed for preference changes.
+Karabiner automatic backups and generated Neovim cache files are not managed.
+
+## Migration history
+
+The old component framework is replaced by native chezmoi source names, ignores,
+templates, and run scripts. The `pre-chezmoi-migration` tag preserves the previous
+implementation. The current decision is documented in `docs/adr/0001-chezmoi.md`.
+Legacy tracked Karabiner backups, if present, are retained under `docs/legacy-karabiner/`.

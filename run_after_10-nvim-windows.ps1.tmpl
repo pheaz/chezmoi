@@ -1,0 +1,17 @@
+{{ if eq .chezmoi.os "windows" -}}
+$ErrorActionPreference = 'Stop'
+$source = '{{ joinPath .chezmoi.sourceDir "dot_config" "nvim" | replace "'" "''" }}'
+if (-not $env:LOCALAPPDATA -or -not [IO.Path]::IsPathRooted($env:LOCALAPPDATA)) {
+    throw 'LOCALAPPDATA must be an absolute directory.'
+}
+$target = Join-Path $env:LOCALAPPDATA 'nvim'
+$item = Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+if ($item) {
+    if ($item.LinkType -eq 'SymbolicLink' -and
+        [IO.Path]::GetFullPath([string]$item.Target).TrimEnd('\') -ieq
+        [IO.Path]::GetFullPath($source).TrimEnd('\')) { return }
+    throw "Refusing to replace unrelated Neovim target: $target"
+}
+New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
+New-Item -ItemType SymbolicLink -Path $target -Target $source | Out-Null
+{{ end -}}

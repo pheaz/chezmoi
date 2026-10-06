@@ -1,0 +1,36 @@
+README.md
+docs
+docs/**
+chezmoi.code-workspace
+.github
+.github/**
+.gitignore
+.gitattributes
+.config/karabiner/automatic_backups
+.config/karabiner/automatic_backups/**
+.config/nvim/plugin/packer_compiled.lua
+{{ if not (or (eq .chezmoi.os "darwin") (eq .chezmoi.os "linux")) }}
+.zshrc
+10-nvim-xdg.sh
+20-git-include.sh
+{{ end }}
+{{ if or (not (or (eq .chezmoi.os "darwin") (eq .chezmoi.os "linux"))) (ne (env "XDG_CONFIG_HOME" | default (joinPath .chezmoi.homeDir ".config") | clean) (joinPath .chezmoi.homeDir ".config")) }}
+.config/nvim
+.config/nvim/**
+{{ end }}
+{{ if ne .chezmoi.os "darwin" }}
+.config/karabiner
+.config/karabiner/**
+30-macos-defaults.sh
+{{ end }}
+{{ if ne .chezmoi.os "windows" }}
+AppData
+AppData/**
+10-nvim-windows.ps1
+20-git-include.ps1
+{{ else }}
+{{ if ne (env "LOCALAPPDATA" | replace "\\" "/" | trimSuffix "/" | lower) (joinPath .chezmoi.homeDir "AppData" "Local" | replace "\\" "/" | lower) }}
+AppData
+AppData/**
+{{ end }}
+{{ end }}

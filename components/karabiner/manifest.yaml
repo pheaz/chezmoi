@@ -1,7 +1,0 @@
-detect:
-  command: "/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli"
-
-mode: symlink
-
-target:
-  macos: "$HOME/.config/karabiner"

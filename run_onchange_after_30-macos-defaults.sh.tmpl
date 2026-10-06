@@ -1,0 +1,14 @@
+{{ if eq .chezmoi.os "darwin" -}}
+#!/bin/sh
+main() {
+    defaults write -g AppleLanguages -array en-US de-DE || return 1
+    defaults write -g AppleLocale -string 'en_US@calendar=iso8601;rg=dezzzz' || return 1
+    defaults write -g ApplePressAndHoldEnabled -bool false || return 1
+    defaults write -g AppleScrollerPagingBehavior -bool true || return 1
+    defaults write -g AppleSpacesSwitchOnActivate -bool false || return 1
+    defaults write -g InitialKeyRepeat -int 13 || return 1
+    defaults write -g KeyRepeat -int 2 || return 1
+    defaults write -g NSAutomaticPeriodSubstitutionEnabled -bool false || return 1
+}
+main
+{{ end -}}

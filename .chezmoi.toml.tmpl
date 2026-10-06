@@ -1,0 +1,4 @@
+# pheaz-chezmoi-migration-v1
+mode = "symlink"
+sourceDir = {{ joinPath .chezmoi.homeDir ".local" "share" "chezmoi" | quote }}
+destDir = {{ .chezmoi.homeDir | quote }}
