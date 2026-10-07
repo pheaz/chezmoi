@@ -32,17 +32,19 @@ Use a feature branch and pull request for changes to protected main.
 - dot_config/symlink_nvim.tmpl: the default POSIX Neovim directory link.
 - dot_config/symlink_karabiner.tmpl: the macOS Karabiner directory link.
 - AppData/Local/symlink_nvim.tmpl: the standard Windows Neovim directory link.
-- dot_config/git/portable.inc: portable Git settings.
-- dot_zshrc: the macOS/Linux ~/.zshrc.
+- configs/git/portable.inc: portable Git settings.
+- configs/zsh/.zshrc: the macOS/Linux zsh configuration.
+- dot_config/git/symlink_portable.inc.tmpl: the portable Git file link.
+- symlink_dot_zshrc.tmpl: the macOS/Linux ~/.zshrc link.
 - run_after_10-nvim-*: redirected XDG/Windows path support.
 - run_after_20-git-include.*: idempotent portable Git include registration.
 - run_onchange_after_30-macos-defaults.sh.tmpl: fixed macOS preferences, without yq.
 - .chezmoi.toml.tmpl and .chezmoiignore: local configuration and target exclusions.
 - README.md, docs/, .github/, .githooks/, and chezmoi.code-workspace: repository metadata.
 
-configs/ is ignored by chezmoi. Explicit symlink templates expose each application
-as one directory link; its children remain ordinary files in the tracked tree.
-Ordinary symlink mode still links eligible other files, including ~/.zshrc.
+configs/ is ignored by chezmoi. Explicit symlink templates expose Neovim and
+Karabiner as directory links and zsh and portable Git settings as file links.
+Their configuration payloads remain ordinary files in the tracked tree.
 
 ## Platform paths and local files
 
