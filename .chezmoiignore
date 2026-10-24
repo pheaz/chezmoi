@@ -28,6 +28,7 @@ AppData
 AppData/**
 10-nvim-windows.ps1
 20-git-include.ps1
+50-windows-keyboard.ps1
 {{ else }}
 {{ if ne (env "LOCALAPPDATA" | replace "\\" "/" | trimSuffix "/" | lower) (joinPath .chezmoi.homeDir "AppData" "Local" | replace "\\" "/" | lower) }}
 AppData

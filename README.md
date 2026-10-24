@@ -34,6 +34,7 @@ Use a feature branch and pull request for changes to protected main.
 - AppData/Local/symlink_nvim.tmpl: the standard Windows Neovim directory link.
 - configs/git/portable.inc: portable Git settings.
 - configs/zsh/.zshrc: the macOS/Linux zsh configuration.
+- configs/windows-keyboard/: renamed MSKLC keyboard source and x64 installer bundle.
 - dot_config/git/symlink_portable.inc.tmpl: the portable Git file link.
 - symlink_dot_zshrc.tmpl: the macOS/Linux ~/.zshrc link.
 - run_after_10-nvim-*: redirected XDG/Windows path support.
@@ -66,6 +67,16 @@ New files appear in git status unless ignored. Karabiner backups and generated
 Neovim cache files are ignored. The migration preserves other local-only extras
 and excludes those specific untracked files through .git/info/exclude; use git add -f on
 specific intended files to start tracking them. Never force-add the whole tree.
+
+## Windows custom keyboard
+
+The `USIntAlt` MSKLC source and compiled x64 installer bundle are tracked under
+`configs/windows-keyboard/`. On x64 Windows, the idempotent
+`run_after_50-windows-keyboard.ps1.tmpl` script installs the layout with
+administrator approval and selects it as the current user's default input
+method. It does not uninstall or modify the former `USIntGr` layout.
+See [Windows keyboard deployment](docs/windows-keyboard.md) for instructions,
+verified package hashes, and platform limitations.
 
 ## Migration history
 

@@ -1,0 +1,110 @@
+{{ if eq .chezmoi.os "windows" -}}
+$ErrorActionPreference = 'Stop'
+
+$repo = '{{ .chezmoi.sourceDir | replace "'" "''" }}'
+$archive = Join-Path $repo 'configs/windows-keyboard/installer/USIntAlt-x64.zip'
+$expectedArchiveHash = '55f63cb22519aaf7eda167145a8ac7a223b1dcf0e1d622a8f2599f7b2bd564e7'
+$expectedDllHash = '1244024ad4c10893ba472cbac89d5dc2dcf2e173ba52655902ce4bc584664ec3'
+$expectedMsiHash = '2c112553b37257b7c5b9601b84753eb514ec0efed3265a2adaa9a356bbd71733'
+$layoutRoot = 'HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layouts'
+$layoutFile = 'usintalt.dll'
+
+# The checked-in MSKLC package contains x64 + 32-bit compatibility DLLs.
+# Other Windows architectures are deliberately not modified.
+if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne
+    [System.Runtime.InteropServices.Architecture]::X64) {
+    Write-Warning 'USIntAlt: bundled installer supports x64 Windows only; skipping.'
+    return
+}
+
+function Get-USIntAltRegistration {
+    @(
+        Get-ChildItem -LiteralPath $layoutRoot | ForEach-Object {
+            $entry = Get-ItemProperty -LiteralPath $_.PSPath
+            if ([string]$entry.'Layout File' -ieq $layoutFile) {
+                [pscustomobject]@{
+                    KLID = $_.PSChildName.ToUpperInvariant()
+                    Description = [string]$entry.'Layout Text'
+                }
+            }
+        }
+    )
+}
+
+$matches = @(Get-USIntAltRegistration)
+$rebootRequired = $false
+if ($matches.Count -eq 0) {
+    if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+        throw "USIntAlt installer archive is missing: $archive"
+    }
+    if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ine $expectedArchiveHash) {
+        throw "USIntAlt installer archive failed SHA-256 verification: $archive"
+    }
+
+    $extractDir = Join-Path ([IO.Path]::GetTempPath()) ('chezmoi-usintalt-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+    try {
+        Expand-Archive -LiteralPath $archive -DestinationPath $extractDir -Force
+        $msi = Join-Path $extractDir 'USIntAlt_amd64.msi'
+        $dll = Join-Path $extractDir 'amd64/USIntAlt.dll'
+        $wowDll = Join-Path $extractDir 'wow64/USIntAlt.dll'
+        foreach ($file in @($msi, $dll, $wowDll)) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+                throw "USIntAlt installer file is missing: $file"
+            }
+        }
+        if ((Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash -ine $expectedMsiHash) {
+            throw 'USIntAlt MSI failed SHA-256 verification.'
+        }
+        if ((Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash -ine $expectedDllHash) {
+            throw 'USIntAlt x64 DLL failed SHA-256 verification.'
+        }
+
+        # MSI custom actions must register the driver. UAC consent may be required.
+        $arguments = '/i "' + $msi + '" /qn /norestart'
+        $install = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Verb RunAs -Wait -PassThru
+        if ($install.ExitCode -notin @(0, 3010)) {
+            throw "USIntAlt MSI installation failed with exit code $($install.ExitCode)."
+        }
+        $rebootRequired = $install.ExitCode -eq 3010
+    }
+    finally {
+        Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    $matches = @(Get-USIntAltRegistration)
+}
+
+if ($matches.Count -ne 1) {
+    throw "Expected one registered USIntAlt layout; found $($matches.Count). A sign-out or restart may be necessary."
+}
+
+# Refuse to select a different driver registered under the same filename.
+$installedDll = Join-Path $env:WINDIR ('System32\' + $layoutFile)
+if (-not (Test-Path -LiteralPath $installedDll -PathType Leaf) -or
+    (Get-FileHash -LiteralPath $installedDll -Algorithm SHA256).Hash -ine $expectedDllHash) {
+    throw "USIntAlt is registered but its System32 driver does not match the tracked installer: $installedDll"
+}
+
+$tip = '0409:' + $matches[0].KLID
+$list = Get-WinUserLanguageList
+$english = @($list | Where-Object { $_.LanguageTag -eq 'en-US' }) | Select-Object -First 1
+if (-not $english) {
+    $list.Add('en-US')
+    $english = @($list | Where-Object { $_.LanguageTag -eq 'en-US' }) | Select-Object -First 1
+}
+
+if (@($english.InputMethodTips) -notcontains $tip) {
+    $english.InputMethodTips.Add($tip)
+    Set-WinUserLanguageList -LanguageList $list -Force
+}
+
+$current = Get-WinDefaultInputMethodOverride
+if (-not $current -or $current.InputMethodTip -ne $tip) {
+    Set-WinDefaultInputMethodOverride -InputTip $tip
+}
+
+Write-Host "USIntAlt keyboard is installed and set as the default input method: $tip"
+if ($rebootRequired) {
+    Write-Warning 'Windows requested a reboot to complete keyboard installation. No automatic reboot was performed.'
+}
+{{ end -}}
