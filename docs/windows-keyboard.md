@@ -1,51 +1,57 @@
-# Windows keyboard: US-International (AltGr, no dead keys)
+# Windows keyboard: US International – AltGr – No Dead Keys
 
-Tracked source: [`../configs/windows-keyboard/us_international_no_dead_keys.klc`](../configs/windows-keyboard/us_international_no_dead_keys.klc).
+This repository tracks the editable source and an MSKLC-generated installer
+bundle for the custom `USIntAlt` keyboard layout. The key mappings are unchanged
+from the original `USIntGr` source; only the MSKLC internal name and display
+description were renamed to avoid a duplicate-identity build error.
 
-- Display name: **United States-International - AltGr - No Dead Keys**
-- Layout identifier in the MSKLC source: `USIntGr`
-- Language: `en-US` (`00000409`)
-- Original attribution in the source: (c) 2017 Daniels Umanovskis
-- Original file SHA-256: `770e1e48639a6658ba8213464607479c2cdd4a457273ef9fc7fb2cf7ce9a5868`
+- Source: [`../configs/windows-keyboard/usintalt.klc`](../configs/windows-keyboard/usintalt.klc)
+- Installer: `configs/windows-keyboard/installer/USIntAlt-x64.zip`
+- Bundle SHA-256: `55f63cb22519aaf7eda167145a8ac7a223b1dcf0e1d622a8f2599f7b2bd564e7`
+- Bundle contents: `USIntAlt_amd64.msi`, `amd64/USIntAlt.dll`, `wow64/USIntAlt.dll`
+- MSI SHA-256: `2c112553b37257b7c5b9601b84753eb514ec0efed3265a2adaa9a356bbd71733`
+- AMD64 DLL SHA-256: `1244024ad4c10893ba472cbac89d5dc2dcf2e173ba52655902ce4bc584664ec3`
+- Keyboard display name: `US International - AltGr - No Dead Keys`
+- Keyboard internal name and driver filename: `USIntAlt`, `usintalt.dll`
+- Language: `en-US` (`0409`); source attribution: Daniels Umanovskis, 2017
 
-The uploaded `.klc` source is stored **byte-for-byte**, including UTF-16
-little-endian with BOM and CRLF line endings; Git is configured not to apply
-text conversion to `.klc` files. Do not reformat it to avoid unintentional
-layout changes.
+The `.klc` source is kept in its native UTF-16 LE format. The `.zip` is derived
+from the user-supplied MSKLC setup package, retaining the x64 MSI and both DLL
+subdirectories that the installer may require. Generated Itanium, standalone
+`setup.exe`, and 32-bit installer files are excluded because this deployment
+is intentionally scoped to x64 Windows.
 
-## Install on another Windows computer
+## Fresh x64 Windows setup
 
-1. Initialize this repository with `chezmoi init --apply pheaz/chezmoi`,
-   or update an existing checkout with `chezmoi update`.
-2. Install [Microsoft Keyboard Layout Creator 1.4](https://www.microsoft.com/en-us/download/details.aspx?id=102134).
-   Microsoft lists Windows 10 support; building on Windows 11 can require
-   compatibility workarounds, so its availability there is not guaranteed.
-3. In MSKLC, choose **File > Load Source File** and open
-   `%USERPROFILE%\.local\share\chezmoi\configs\windows-keyboard\us_international_no_dead_keys.klc`.
-4. Choose **Project > Build DLL and Setup Package**. Keep the generated
-   installer files together, and run its `setup.exe` on the target PC
-   (administrator approval may be required).
-5. Sign out and back in or restart Windows if necessary. Under **Settings >
-   Time & language > Language & region > English (United States) > Language
-   options > Keyboards**, add/select **United States-International - AltGr -
-   No Dead Keys**. Windows 10 menu labels may vary.
-6. Verify the selected keyboard with **Win + Space** and test AltGr characters.
+1. Install Git and chezmoi, and authenticate for the private repository.
+2. Run `chezmoi init --apply pheaz/chezmoi`, or `chezmoi update` on an existing
+   checkout. Chezmoi invokes the Windows-specific PowerShell after-script.
+3. Accept the Windows UAC prompt if the keyboard is not installed.
+   The script verifies SHA-256 hashes, extracts the archive to a temporary
+   directory, and runs `msiexec /i ... /qn /norestart`.
+4. The script detects the registered KLID, adds its input method to `en-US`
+   if needed, and selects it as the current user's default.
+5. No automatic reboot is initiated. A Windows sign-out/restart may be needed
+   before Windows fully exposes a newly installed keyboard. Verify with
+   `Win + Space` and test an AltGr mapping.
 
-If a working setup package was previously generated on the original machine,
-you can reuse it on a compatible target instead of rebuilding the `.klc`.
-The installer package itself is **not** included in this repository.
+The `run_after_50-windows-keyboard.ps1.tmpl` script is idempotent: on later
+`chezmoi apply` runs, it skips installing an already registered matching
+layout and only changes per-user input preferences when necessary. If a
+registered `usintalt.dll` does not match the tracked DLL, it stops rather than
+overwriting it. The previous `USIntGr` keyboard is not removed or modified.
 
-## Scope
+## Limitations
 
-The repository intentionally excludes `configs/` from chezmoi home targets.
-The tracked `.klc` source is available in the chezmoi source checkout, but
-**`chezmoi apply` does not install or activate the layout**: Windows needs a
-compiled keyboard DLL and registered layout, which the generated installer
-provides.
+- This deployment supports **x64 Windows only**. ARM64 and 32-bit Windows
+  are not modified by the script.
+- Installing a keyboard layout driver requires administrator approval.
+  Selecting the input method runs in the context of the current Windows user.
+- Only the *default keyboard input method* is configured, not the full
+  preferred-language order, display language, culture, or system locale.
+- The supplied MSKLC output and package hashes were inspected, but an actual
+  installation and key mapping test on a new Windows machine was **not** run.
 
-The `.klc` does **not** specify the user's entire Windows language list,
-preferred-language order, display language, regional settings, or default input
-method. Export and restore those preferences separately, installing this
-keyboard before restoring a language list that references it. Do not copy
-machine-specific registry keys or keyboard DLLs into the repo as a substitute
-for a supported installer.
+To rebuild, load `usintalt.klc` in Microsoft Keyboard Layout Creator and use
+**Project → Build DLL and Setup Package**. Update the tracked ZIP and SHA-256
+values together when the package intentionally changes.
