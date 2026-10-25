@@ -14,6 +14,7 @@ description were renamed to avoid a duplicate-identity build error.
 - Keyboard display name: `US International - AltGr - No Dead Keys`
 - Keyboard internal name and driver filename: `USIntAlt`, `usintalt.dll`
 - Language: `en-US` (`0409`); source attribution: Daniels Umanovskis, 2017
+- Upstream layout: [umanovskis/win-kbd-usint-nodead](https://github.com/umanovskis/win-kbd-usint-nodead); [MIT license](../configs/windows-keyboard/LICENSE)
 
 The `.klc` source is kept in its native UTF-16 LE format. The `.zip` is derived
 from the user-supplied MSKLC setup package, retaining the x64 MSI and both DLL
